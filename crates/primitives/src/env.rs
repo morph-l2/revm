@@ -8,19 +8,14 @@ pub use handler_cfg::{CfgEnvWithHandlerCfg, EnvWithHandlerCfg, HandlerCfg};
 
 use crate::{
     calc_blob_gasprice, AccessListItem, Account, Address, Bytes, InvalidHeader, InvalidTransaction,
-    Spec, SpecId, B256, GAS_PER_BLOB, MAX_BLOB_NUMBER_PER_BLOCK, MAX_CODE_SIZE, MAX_INITCODE_SIZE,
-    U256, VERSIONED_HASH_VERSION_KZG,
+    Spec, SpecId, B256, GAS_PER_BLOB, KECCAK_EMPTY, MAX_BLOB_NUMBER_PER_BLOCK, MAX_CODE_SIZE,
+    MAX_INITCODE_SIZE, U256, VERSIONED_HASH_VERSION_KZG,
 };
 use alloy_primitives::TxKind;
 use core::cmp::{min, Ordering};
 use core::hash::Hash;
 use std::boxed::Box;
 use std::vec::Vec;
-
-#[cfg(not(feature = "scroll"))]
-use crate::KECCAK_EMPTY;
-#[cfg(feature = "scroll")]
-use crate::POSEIDON_EMPTY;
 
 /// EVM environment configuration.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -232,16 +227,8 @@ impl Env {
         // EIP-3607: Reject transactions from senders with deployed code
         // This EIP is introduced after london but there was no collision in past
         // so we can leave it enabled always
-        cfg_if::cfg_if! {
-            if #[cfg(not(feature = "scroll"))] {
-                if !self.cfg.is_eip3607_disabled() && account.info.code_hash != KECCAK_EMPTY {
-                    return Err(InvalidTransaction::RejectCallerWithCode);
-                }
-            } else {
-                if !self.cfg.is_eip3607_disabled() && account.info.code_hash != POSEIDON_EMPTY {
-                    return Err(InvalidTransaction::RejectCallerWithCode);
-                }
-            }
+        if !self.cfg.is_eip3607_disabled() && account.info.code_hash != KECCAK_EMPTY {
+            return Err(InvalidTransaction::RejectCallerWithCode);
         }
 
         // Check that the transaction's nonce is correct

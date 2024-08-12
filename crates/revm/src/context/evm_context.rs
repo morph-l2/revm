@@ -623,12 +623,9 @@ mod tests {
                 balance: bal,
                 #[cfg(feature = "scroll")]
                 code_size: by.len(),
-                #[cfg(not(feature = "scroll"))]
                 code_hash: by.clone().hash_slow(),
-                #[cfg(feature = "scroll")]
-                code_hash: by.clone().poseidon_hash_slow(),
-                #[cfg(feature = "scroll")]
-                keccak_code_hash: by.clone().keccak_hash_slow(),
+                #[cfg(feature = "scroll-poseidon-codehash")]
+                poseidon_code_hash: by.clone().poseidon_hash_slow(),
                 code: Some(by),
             },
         );

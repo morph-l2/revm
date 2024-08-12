@@ -6,9 +6,6 @@ use std::vec::Vec;
 
 use super::LoadAccountResult;
 
-#[cfg(feature = "scroll")]
-use revm_primitives::POSEIDON_EMPTY;
-
 /// A dummy [Host] implementation.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DummyHost {
@@ -74,20 +71,7 @@ impl Host for DummyHost {
     }
 
     #[inline]
-    #[cfg(not(feature = "scroll"))]
     fn code_hash(&mut self, _address: Address) -> Option<(B256, bool)> {
-        Some((KECCAK_EMPTY, false))
-    }
-
-    #[inline]
-    #[cfg(feature = "scroll")]
-    fn code_hash(&mut self, _address: Address) -> Option<(B256, bool)> {
-        Some((POSEIDON_EMPTY, false))
-    }
-
-    #[inline]
-    #[cfg(feature = "scroll")]
-    fn keccak_code_hash(&mut self, _address: Address) -> Option<(B256, bool)> {
         Some((KECCAK_EMPTY, false))
     }
 

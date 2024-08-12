@@ -7,8 +7,6 @@ pub use legacy::{JumpTable, LegacyAnalyzedBytecode};
 use std::sync::Arc;
 
 use crate::{keccak256, Bytes, B256, KECCAK_EMPTY};
-#[cfg(feature = "scroll")]
-use crate::{poseidon, POSEIDON_EMPTY};
 
 /// State of the [`Bytecode`] analysis.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -47,7 +45,6 @@ impl Bytecode {
     }
 
     /// Calculate hash of the bytecode.
-    #[cfg(not(feature = "scroll"))]
     pub fn hash_slow(&self) -> B256 {
         if self.is_empty() {
             KECCAK_EMPTY
@@ -57,22 +54,14 @@ impl Bytecode {
     }
 
     /// Calculate poseidon hash of the bytecode.
-    #[cfg(feature = "scroll")]
+    #[cfg(feature = "scroll-poseidon-codehash")]
     pub fn poseidon_hash_slow(&self) -> B256 {
+        use crate::{poseidon, POSEIDON_EMPTY};
+
         if self.is_empty() {
             POSEIDON_EMPTY
         } else {
             poseidon(self.original_byte_slice())
-        }
-    }
-
-    /// Calculate hash of the bytecode.
-    #[cfg(feature = "scroll")]
-    pub fn keccak_hash_slow(&self) -> B256 {
-        if self.is_empty() {
-            KECCAK_EMPTY
-        } else {
-            keccak256(self.original_byte_slice())
         }
     }
 
