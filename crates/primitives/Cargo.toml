@@ -6,7 +6,7 @@ keywords = ["no_std", "ethereum", "evm", "revm", "types"]
 license = "MIT"
 name = "revm-primitives"
 repository = "https://github.com/bluealloy/revm"
-version = "7.1.0"
+version = "8.0.0"
 readme = "../../README.md"
 
 [package.metadata.docs.rs]
@@ -53,8 +53,7 @@ serde = { version = "1.0", default-features = false, features = [
 ], optional = true }
 
 # scroll
-halo2curves = { git = "https://github.com/scroll-tech/halo2curves.git", branch = "feat/sp1", optional = true }
-poseidon-base = { git = "https://github.com/scroll-tech/poseidon-circuit.git", branch = "feat/sp1", optional = true }
+poseidon-bn254 = { git = "https://github.com/scroll-tech/poseidon-bn254", branch = "master", features = ["bn254"], optional = true }
 
 # sp1
 getrandom = { version = "*", features = ["custom"] } # just for disable
@@ -102,7 +101,7 @@ scroll = []
 # Scroll default handler enabled Scroll handler register by default in EvmBuilder.
 scroll-default-handler = ["scroll"]
 negate-scroll-default-handler = []
-scroll-poseidon-codehash = ["scroll", "halo2curves", "poseidon-base"]
+scroll-poseidon-codehash = ["scroll", "poseidon-bn254"]
 
 dev = [
     "memory_limit",
