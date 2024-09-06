@@ -40,6 +40,7 @@ pub fn selfbalance<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     push!(interpreter, balance.data);
 }
 
+#[cfg(not(feature = "morph"))]
 pub fn extcodesize<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
     pop_address!(interpreter, address);
     let Some(code) = host.code(address) else {
@@ -56,6 +57,18 @@ pub fn extcodesize<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     }
 
     push!(interpreter, U256::from(code.len()));
+}
+
+#[cfg(feature = "morph")]
+pub fn extcodesize<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
+    pop_address!(interpreter, address);
+    let Some((code_size, is_cold)) = host.code_size(address) else {
+        interpreter.instruction_result = InstructionResult::FatalExternalError;
+        return;
+    };
+    gas!(interpreter, warm_cold_cost(is_cold));
+
+    push!(interpreter, U256::from(code_size));
 }
 
 /// EIP-1052: EXTCODEHASH opcode
@@ -105,6 +118,7 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         .set_data(memory_offset, code_offset, len, &code);
 }
 
+#[cfg(not(feature = "morph"))]
 pub fn blockhash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
     gas!(interpreter, gas::BLOCKHASH);
     pop_top!(interpreter, number);
@@ -115,6 +129,37 @@ pub fn blockhash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
         return;
     };
     *number = U256::from_be_bytes(hash.0);
+}
+
+#[cfg(feature = "morph")]
+pub fn blockhash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
+    use revm_primitives::BLOCK_HASH_HISTORY;
+
+    gas!(interpreter, gas::BLOCKHASH);
+    pop_top!(interpreter, number);
+
+    let block_number = host.env().block.number;
+
+    match block_number.checked_sub(*number) {
+        Some(diff) if !diff.is_zero() => {
+            let diff = as_u64_saturated!(diff);
+            let block_number = as_u64_or_fail!(interpreter, number);
+
+            if SPEC::enabled(BERNOULLI) && diff <= BLOCK_HASH_HISTORY {
+                let mut hasher = crate::primitives::Keccak256::new();
+                hasher.update(host.env().cfg.chain_id.to_be_bytes());
+                hasher.update(block_number.to_be_bytes());
+                *number = U256::from_be_bytes(*hasher.finalize());
+                return;
+            }
+        }
+        _ => {
+            // If blockhash is requested for the current block, the hash should be 0, so we fall
+            // through.
+        }
+    }
+
+    *number = U256::ZERO;
 }
 
 pub fn sload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
@@ -153,7 +198,14 @@ pub fn sstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host:
 /// EIP-1153: Transient storage opcodes
 /// Store value to transient storage
 pub fn tstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
-    check!(interpreter, CANCUN);
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "morph")] {
+            check!(interpreter, CURIE);
+        } else {
+            check!(interpreter, CANCUN);
+        }
+    }
+
     require_non_staticcall!(interpreter);
     gas!(interpreter, gas::WARM_STORAGE_READ_COST);
 
@@ -165,7 +217,14 @@ pub fn tstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host:
 /// EIP-1153: Transient storage opcodes
 /// Load value from transient storage
 pub fn tload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
-    check!(interpreter, CANCUN);
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "morph")] {
+            check!(interpreter, CURIE);
+        } else {
+            check!(interpreter, CANCUN);
+        }
+    }
+
     gas!(interpreter, gas::WARM_STORAGE_READ_COST);
 
     pop_top!(interpreter, index);
@@ -209,6 +268,12 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
 pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
     require_non_staticcall!(interpreter);
     pop_address!(interpreter, target);
+
+    #[cfg(feature = "morph")]
+    if SPEC::enabled(BERNOULLI) {
+        interpreter.instruction_result = InstructionResult::NotActivated;
+        return;
+    }
 
     let Some(res) = host.selfdestruct(interpreter.contract.target_address, target) else {
         interpreter.instruction_result = InstructionResult::FatalExternalError;

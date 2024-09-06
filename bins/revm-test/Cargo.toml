@@ -26,3 +26,7 @@ name = "transfer"
 
 [[bin]]
 name = "burntpix"
+
+[features]
+morph = ["revm/morph"]
+morph-poseidon-codehash = ["morph", "revm/morph-poseidon-codehash"]

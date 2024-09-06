@@ -20,6 +20,8 @@ mod frame;
 pub mod handler;
 mod inspector;
 mod journaled_state;
+#[cfg(feature = "morph")]
+pub mod morph;
 #[cfg(feature = "optimism")]
 pub mod optimism;
 

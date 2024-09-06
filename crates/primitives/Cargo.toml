@@ -50,11 +50,17 @@ serde = { version = "1.0", default-features = false, features = [
     "rc",
 ], optional = true }
 
+# morph
+poseidon-bn254 = { git = "https://github.com/scroll-tech/poseidon-bn254", branch = "master", features = ["bn254"], optional = true }
+
+# sp1
+getrandom = { version = "*", features = ["custom"] } # just for disable
+
 [build-dependencies]
 hex = { version = "0.4", default-features = false }
 
 [features]
-default = ["std", "c-kzg", "portable"]
+default = ["std", "kzg-rs", "portable"]
 std = [
     "serde?/std",
     "alloy-eips/std",
@@ -88,6 +94,12 @@ optimism = []
 optimism-default-handler = ["optimism"]
 negate-optimism-default-handler = []
 
+morph = []
+# Morph default handler enabled Morph handler register by default in EvmBuilder.
+morph-default-handler = ["morph"]
+negate-morph-default-handler = []
+morph-poseidon-codehash = ["morph", "poseidon-bn254"]
+
 dev = [
     "memory_limit",
     "optional_balance_check",
@@ -111,3 +123,12 @@ c-kzg = ["dep:c-kzg"]
 # `kzg-rs` is not audited but useful for `no_std` environment.
 #   use it with causing and default to `c-kzg` if possible!
 kzg-rs = ["dep:kzg-rs"]
+
+all = [
+    "std",
+    "serde",
+    "arbitrary",
+    "asm-keccak",
+    "portable",
+    "dev",
+]

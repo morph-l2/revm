@@ -21,8 +21,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: ["stable", "beta", "nightly"]
-        flags: ["--no-default-features", "", "--all-features"]
+        rust: [ "stable", "beta", "nightly" ]
+        flags: [
+          "--no-default-features",
+          "",
+          "--features=\"morph\"",
+          "--features=\"morph, morph-poseidon-codehash\"",
+          "--features=\"all, morph\"",
+          "--features=\"all, morph, morph-poseidon-codehash\"",
+          "--features=\"optimism\"",
+          "--features=\"all, optimism\""
+        ]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -38,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "optimism,kzg-rs"]
+        features: [ "", "optimism,kzg-rs" ]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -53,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "serde", "std"]
+        features: [ "", "serde", "std" ]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -66,9 +75,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo clippy --workspace --all-targets --all-features
+      - run: cargo clippy --workspace --all-targets --features all,morph
         env:
           RUSTFLAGS: -Dwarnings
+      - run: cargo clippy --workspace --all-targets --features all,optimism
 
   docs:
     name: docs
@@ -79,7 +89,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rust-docs
-      - run: cargo doc --workspace --all-features --no-deps --document-private-items
+      - run: cargo doc --workspace --features all,morph --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: "--cfg docsrs -D warnings"
 

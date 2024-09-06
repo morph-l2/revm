@@ -5,7 +5,7 @@ pub use SpecId::*;
 /// Specification IDs and their activation block.
 ///
 /// Information was obtained from the [Ethereum Execution Specifications](https://github.com/ethereum/execution-specs)
-#[cfg(not(feature = "optimism"))]
+#[cfg(not(any(feature = "optimism", feature = "morph")))]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, enumn::N)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -72,6 +72,51 @@ pub enum SpecId {
     LATEST = u8::MAX,
 }
 
+/// Specification IDs and their activation block.
+///
+/// Information was obtained from the [Ethereum Execution Specifications](https://github.com/ethereum/execution-specs)
+#[cfg(feature = "morph")]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, enumn::N)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum SpecId {
+    FRONTIER = 0,
+    FRONTIER_THAWING = 1,
+    HOMESTEAD = 2,
+    DAO_FORK = 3,
+    TANGERINE = 4,
+    SPURIOUS_DRAGON = 5,
+    BYZANTIUM = 6,
+    CONSTANTINOPLE = 7,
+    PETERSBURG = 8,
+    ISTANBUL = 9,
+    MUIR_GLACIER = 10,
+    BERLIN = 11,
+    LONDON = 12,
+    ARROW_GLACIER = 13,
+    GRAY_GLACIER = 14,
+    MERGE = 15,
+    SHANGHAI = 16,
+    /// The morph network initially started with Shanghai with some features disabled.
+    PRE_BERNOULLI = 17,
+    /// Bernoulli update introduces:
+    ///   - Enable `SHA-256` precompile.
+    ///   - Use `EIP-4844` blobs for Data Availability (not part of layer2).
+    BERNOULLI = 18,
+    /// Curie update introduces:
+    ///   - Support `EIP-1559` transactions.
+    ///   - Support the `BASEFEE`, `MCOPY`, `TLOAD`, `TSTORE` opcodes.
+    ///
+    /// Although the Curie update include new opcodes in Cancun, the most important change
+    /// `EIP-4844` is not included. So we sort it before Cancun.
+    CURIE = 19,
+    CANCUN = 20,
+    PRAGUE = 21,
+    PRAGUE_EOF = 22,
+    #[default]
+    LATEST = u8::MAX,
+}
+
 impl SpecId {
     /// Returns the `SpecId` for the given `u8`.
     #[inline]
@@ -123,6 +168,12 @@ impl From<&str> for SpecId {
             "Fjord" => SpecId::FJORD,
             #[cfg(feature = "optimism")]
             "Granite" => SpecId::GRANITE,
+            #[cfg(feature = "morph")]
+            "PreBernoulli" => SpecId::PRE_BERNOULLI,
+            #[cfg(feature = "morph")]
+            "Bernoulli" => SpecId::BERNOULLI,
+            #[cfg(feature = "morph")]
+            "Curie" => SpecId::CURIE,
             _ => Self::LATEST,
         }
     }
@@ -163,6 +214,12 @@ impl From<SpecId> for &'static str {
             SpecId::FJORD => "Fjord",
             #[cfg(feature = "optimism")]
             SpecId::GRANITE => "Granite",
+            #[cfg(feature = "morph")]
+            SpecId::PRE_BERNOULLI => "PreBernoulli",
+            #[cfg(feature = "morph")]
+            SpecId::BERNOULLI => "Bernoulli",
+            #[cfg(feature = "morph")]
+            SpecId::CURIE => "Curie",
             SpecId::LATEST => "Latest",
         }
     }
@@ -227,7 +284,15 @@ spec!(FJORD, FjordSpec);
 #[cfg(feature = "optimism")]
 spec!(GRANITE, GraniteSpec);
 
-#[cfg(not(feature = "optimism"))]
+// Morph Hardforks
+#[cfg(feature = "morph")]
+spec!(PRE_BERNOULLI, PreBernoulliSpec);
+#[cfg(feature = "morph")]
+spec!(BERNOULLI, BernoulliSpec);
+#[cfg(feature = "morph")]
+spec!(CURIE, CurieSpec);
+
+#[cfg(not(any(feature = "optimism", feature = "morph")))]
 #[macro_export]
 macro_rules! spec_to_generic {
     ($spec_id:expr, $e:expr) => {{
@@ -393,6 +458,90 @@ macro_rules! spec_to_generic {
     }};
 }
 
+#[cfg(feature = "morph")]
+#[macro_export]
+macro_rules! spec_to_generic {
+    ($spec_id:expr, $e:expr) => {{
+        // We are transitioning from var to generic spec.
+        match $spec_id {
+            $crate::SpecId::FRONTIER | SpecId::FRONTIER_THAWING => {
+                use $crate::FrontierSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::HOMESTEAD | SpecId::DAO_FORK => {
+                use $crate::HomesteadSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::TANGERINE => {
+                use $crate::TangerineSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::SPURIOUS_DRAGON => {
+                use $crate::SpuriousDragonSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::BYZANTIUM => {
+                use $crate::ByzantiumSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::PETERSBURG | $crate::SpecId::CONSTANTINOPLE => {
+                use $crate::PetersburgSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::ISTANBUL | $crate::SpecId::MUIR_GLACIER => {
+                use $crate::IstanbulSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::BERLIN => {
+                use $crate::BerlinSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::LONDON
+            | $crate::SpecId::ARROW_GLACIER
+            | $crate::SpecId::GRAY_GLACIER => {
+                use $crate::LondonSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::MERGE => {
+                use $crate::MergeSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::SHANGHAI => {
+                use $crate::ShanghaiSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::CANCUN => {
+                use $crate::CancunSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::LATEST => {
+                use $crate::LatestSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::PRAGUE => {
+                use $crate::PragueSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::PRAGUE_EOF => {
+                use $crate::PragueEofSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::PRE_BERNOULLI => {
+                use $crate::PreBernoulliSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::BERNOULLI => {
+                use $crate::BernoulliSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::CURIE => {
+                use $crate::CurieSpec as SPEC;
+                $e
+            }
+        }
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,6 +573,12 @@ mod tests {
         spec_to_generic!(SHANGHAI, assert_eq!(SPEC::SPEC_ID, SHANGHAI));
         #[cfg(feature = "optimism")]
         spec_to_generic!(CANYON, assert_eq!(SPEC::SPEC_ID, CANYON));
+        #[cfg(feature = "morph")]
+        spec_to_generic!(PRE_BERNOULLI, assert_eq!(SPEC::SPEC_ID, PRE_BERNOULLI));
+        #[cfg(feature = "morph")]
+        spec_to_generic!(BERNOULLI, assert_eq!(SPEC::SPEC_ID, BERNOULLI));
+        #[cfg(feature = "morph")]
+        spec_to_generic!(CURIE, assert_eq!(SPEC::SPEC_ID, CURIE));
         spec_to_generic!(CANCUN, assert_eq!(SPEC::SPEC_ID, CANCUN));
         #[cfg(feature = "optimism")]
         spec_to_generic!(ECOTONE, assert_eq!(SPEC::SPEC_ID, ECOTONE));
@@ -580,5 +735,41 @@ mod optimism_tests {
         assert!(SpecId::enabled(SpecId::GRANITE, SpecId::ECOTONE));
         assert!(SpecId::enabled(SpecId::GRANITE, SpecId::FJORD));
         assert!(SpecId::enabled(SpecId::GRANITE, SpecId::GRANITE));
+    }
+}
+
+#[cfg(feature = "morph")]
+#[cfg(test)]
+mod morph_tests {
+    use super::*;
+
+    #[test]
+    fn test_pre_bernoulli_post_merge_hardforks() {
+        assert!(PreBernoulliSpec::enabled(SpecId::MERGE));
+        assert!(PreBernoulliSpec::enabled(SpecId::SHANGHAI));
+        assert!(!PreBernoulliSpec::enabled(SpecId::BERNOULLI));
+        assert!(!PreBernoulliSpec::enabled(SpecId::CURIE));
+        assert!(!PreBernoulliSpec::enabled(SpecId::CANCUN));
+        assert!(!PreBernoulliSpec::enabled(SpecId::LATEST));
+    }
+
+    #[test]
+    fn test_bernoulli_post_merge_hardforks() {
+        assert!(BernoulliSpec::enabled(SpecId::MERGE));
+        assert!(BernoulliSpec::enabled(SpecId::SHANGHAI));
+        assert!(BernoulliSpec::enabled(SpecId::PRE_BERNOULLI));
+        assert!(!BernoulliSpec::enabled(SpecId::CURIE));
+        assert!(!BernoulliSpec::enabled(SpecId::CANCUN));
+        assert!(!BernoulliSpec::enabled(SpecId::LATEST));
+    }
+
+    #[test]
+    fn test_curie_post_merge_hardforks() {
+        assert!(CurieSpec::enabled(SpecId::MERGE));
+        assert!(CurieSpec::enabled(SpecId::SHANGHAI));
+        assert!(CurieSpec::enabled(SpecId::PRE_BERNOULLI));
+        assert!(CurieSpec::enabled(SpecId::BERNOULLI));
+        assert!(!CurieSpec::enabled(SpecId::CANCUN));
+        assert!(!CurieSpec::enabled(SpecId::LATEST));
     }
 }
