@@ -65,6 +65,12 @@ impl Host for DummyHost {
     }
 
     #[inline]
+    #[cfg(feature = "morph")]
+    fn code_size(&mut self, _address: Address) -> Option<(usize, bool)> {
+        Some((0, false))
+    }
+
+    #[inline]
     fn code_hash(&mut self, _address: Address) -> Option<Eip7702CodeLoad<B256>> {
         Some(Eip7702CodeLoad::new_not_delegated(KECCAK_EMPTY, false))
     }

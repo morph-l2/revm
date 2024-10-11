@@ -24,6 +24,7 @@ all = "warn"
 [dependencies]
 revm-primitives = { path = "../primitives", version = "9.0.0", default-features = false }
 
+cfg-if = "1.0"
 paste = { version = "1.0", optional = true }
 phf = { version = "0.11", default-features = false, optional = true, features = [
     "macros",
@@ -60,6 +61,20 @@ negate-optimism-default-handler = [
     "revm-primitives/negate-optimism-default-handler",
 ]
 
+morph = ["revm-primitives/morph"]
+# Morph default handler enabled Morph handler register by default in EvmBuilder.
+morph-default-handler = [
+    "morph",
+    "revm-primitives/morph-default-handler",
+]
+negate-morph-default-handler = [
+    "revm-primitives/negate-morph-default-handler",
+]
+morph-poseidon-codehash = [
+    "morph",
+    "revm-primitives/morph-poseidon-codehash",
+]
+
 dev = [
     "memory_limit",
     "optional_balance_check",
@@ -78,3 +93,14 @@ optional_no_base_fee = ["revm-primitives/optional_no_base_fee"]
 optional_beneficiary_reward = ["revm-primitives/optional_beneficiary_reward"]
 
 kzg-rs = ["revm-primitives/kzg-rs"]
+
+all = [
+    "std",
+    "serde",
+    "arbitrary",
+    "asm-keccak",
+    "portable",
+    "parse",
+    "dev",
+    "kzg-rs",
+]

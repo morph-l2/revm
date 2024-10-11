@@ -51,6 +51,12 @@ impl<'a, EXT, DB: Database> EvmHandler<'a, EXT, DB> {
                 } else {
                     Handler::mainnet_with_spec(cfg.spec_id)
                 }
+            } else if #[cfg(feature = "morph")] {
+                if cfg.is_morph {
+                    Handler::morph_with_spec(cfg.spec_id)
+                } else {
+                    Handler::mainnet_with_spec(cfg.spec_id)
+                }
             } else {
                 Handler::mainnet_with_spec(cfg.spec_id)
             }
@@ -86,10 +92,27 @@ impl<'a, EXT, DB: Database> EvmHandler<'a, EXT, DB> {
         handler
     }
 
+    /// Handler for morph
+    #[cfg(feature = "morph")]
+    pub fn morph<SPEC: Spec + 'static>() -> Self {
+        let mut handler = Self::mainnet::<SPEC>();
+        handler.cfg.is_morph = true;
+        handler.append_handler_register(HandleRegisters::Plain(
+            crate::morph::morph_handle_register::<DB, EXT>,
+        ));
+        handler
+    }
+
     /// Optimism with spec. Similar to [`Self::mainnet_with_spec`].
     #[cfg(feature = "optimism")]
     pub fn optimism_with_spec(spec_id: SpecId) -> Self {
         spec_to_generic!(spec_id, Self::optimism::<SPEC>())
+    }
+
+    /// Morph with spec. Similar to [`Self::mainnet_with_spec`]
+    #[cfg(feature = "morph")]
+    pub fn morph_with_spec(spec_id: SpecId) -> Self {
+        spec_to_generic!(spec_id, Self::morph::<SPEC>())
     }
 
     /// Creates handler with variable spec id, inside it will call `mainnet::<SPEC>` for

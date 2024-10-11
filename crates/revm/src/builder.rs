@@ -37,6 +37,12 @@ impl<'a> Default for EvmBuilder<'a, SetGenericStage, (), EmptyDB> {
                     // set is_optimism to true by default.
                     handler_cfg.is_optimism = true;
 
+            } else if #[cfg(all(feature = "morph-default-handler",
+                not(feature = "negate-morph-default-handler")))] {
+                    let mut handler_cfg = HandlerCfg::new(SpecId::CURIE);
+                    // set is_morph to true by default.
+                    handler_cfg.is_morph = true;
+
             } else {
                 let handler_cfg = HandlerCfg::new(SpecId::LATEST);
             }
@@ -168,10 +174,26 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, SetGenericStage, EXT, DB> {
         }
     }
 
+    /// Sets the Morph handler with latest spec.
+    ///
+    /// If `morph-default-handler` feature is enabled this is not needed.
+    #[cfg(feature = "morph")]
+    pub fn morph(mut self) -> EvmBuilder<'a, HandlerStage, EXT, DB> {
+        self.handler = Handler::morph_with_spec(self.handler.cfg.spec_id);
+        EvmBuilder {
+            context: self.context,
+            handler: self.handler,
+            phantom: PhantomData,
+        }
+    }
+
     /// Sets the mainnet handler with latest spec.
     ///
-    /// Enabled only with `optimism-default-handler` feature.
-    #[cfg(feature = "optimism-default-handler")]
+    /// Enabled only with `optimism-default-handler` or `morph-default-handler` feature.
+    #[cfg(any(
+        feature = "optimism-default-handler",
+        feature = "morph-default-handler"
+    ))]
     pub fn mainnet(mut self) -> EvmBuilder<'a, HandlerStage, EXT, DB> {
         self.handler = Handler::mainnet_with_spec(self.handler.cfg.spec_id);
         EvmBuilder {
@@ -209,8 +231,11 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, HandlerStage, EXT, DB> {
 
     /// Resets the [`Handler`] and sets base mainnet handler.
     ///
-    /// Enabled only with `optimism-default-handler` feature.
-    #[cfg(feature = "optimism-default-handler")]
+    /// Enabled only with `optimism-default-handler` or `morph-default-handler` feature.
+    #[cfg(any(
+        feature = "optimism-default-handler",
+        feature = "morph-default-handler"
+    ))]
     pub fn reset_handler_with_mainnet(mut self) -> EvmBuilder<'a, HandlerStage, EXT, DB> {
         self.handler = Handler::mainnet_with_spec(self.handler.cfg.spec_id);
         EvmBuilder {

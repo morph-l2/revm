@@ -12,6 +12,9 @@ pub struct HandlerCfg {
     /// Optimism related field, it will append the Optimism handle register to the EVM.
     #[cfg(feature = "optimism")]
     pub is_optimism: bool,
+    /// Morph related field, it will append the Morph handle register to the EVM.
+    #[cfg(feature = "morph")]
+    pub is_morph: bool,
 }
 
 impl Default for HandlerCfg {
@@ -31,10 +34,20 @@ impl HandlerCfg {
                 let is_optimism = false;
             }
         }
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "morph-default-handler",
+                not(feature = "negate-morph-default-handler")))] {
+                    let is_morph = true;
+            } else if #[cfg(feature = "morph")] {
+                let is_morph = false;
+            }
+        }
         Self {
             spec_id,
             #[cfg(feature = "optimism")]
             is_optimism,
+            #[cfg(feature = "morph")]
+            is_morph,
         }
     }
 
@@ -47,11 +60,28 @@ impl HandlerCfg {
         }
     }
 
-    /// Returns `true` if the optimism feature is enabled and flag is set to `true`.
+    /// Creates new `HandlerCfg` instance with the morph feature.
+    #[cfg(feature = "morph")]
+    pub fn new_with_morph(spec_id: SpecId, is_morph: bool) -> Self {
+        Self { spec_id, is_morph }
+    }
+
+    /// Returns `true` if the optimism feature is enabled and flag is set to true.
     pub fn is_optimism(&self) -> bool {
         cfg_if::cfg_if! {
             if #[cfg(feature = "optimism")] {
                 self.is_optimism
+            } else {
+                false
+            }
+        }
+    }
+
+    /// Returns true if the morph feature is enabled and flag is set to true.
+    pub fn is_morph(&self) -> bool {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "morph")] {
+                self.is_morph
             } else {
                 false
             }
@@ -80,6 +110,8 @@ impl CfgEnvWithHandlerCfg {
     /// Returns new `CfgEnvWithHandlerCfg` instance with the chain spec id.
     ///
     /// is_optimism will be set to default value depending on `optimism-default-handler` feature.
+    ///
+    /// is_morph will be set to default value depending on `morph-default-handler` feature.
     pub fn new_with_spec_id(cfg_env: CfgEnv, spec_id: SpecId) -> Self {
         Self::new(cfg_env, HandlerCfg::new(spec_id))
     }
@@ -123,6 +155,8 @@ impl EnvWithHandlerCfg {
     /// Returns new `EnvWithHandlerCfg` instance with the chain spec id.
     ///
     /// is_optimism will be set to default value depending on `optimism-default-handler` feature.
+    ///
+    /// is_morph will be set to default value depending on `morph-default-handler` feature.
     pub fn new_with_spec_id(env: Box<Env>, spec_id: SpecId) -> Self {
         Self::new(env, HandlerCfg::new(spec_id))
     }

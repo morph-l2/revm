@@ -9,7 +9,7 @@ use crate::{
         AccessListItem, Account, Address, AnalysisKind, Bytecode, Bytes, CfgEnv, EVMError, Env,
         Eof, HashSet, Spec,
         SpecId::{self, *},
-        B256, EOF_MAGIC_BYTES, EOF_MAGIC_HASH, U256,
+        B256, EOF_MAGIC_BYTES, U256,
     },
     JournalCheckpoint,
 };
@@ -30,6 +30,9 @@ pub struct InnerEvmContext<DB: Database> {
     /// Used as temporary value holder to store L1 block info.
     #[cfg(feature = "optimism")]
     pub l1_block_info: Option<crate::optimism::L1BlockInfo>,
+    /// Used as temporary value holder to store L1 block info.
+    #[cfg(feature = "morph")]
+    pub l1_block_info: Option<crate::morph::L1BlockInfo>,
 }
 
 impl<DB: Database + Clone> Clone for InnerEvmContext<DB>
@@ -42,7 +45,7 @@ where
             journaled_state: self.journaled_state.clone(),
             db: self.db.clone(),
             error: self.error.clone(),
-            #[cfg(feature = "optimism")]
+            #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: self.l1_block_info.clone(),
         }
     }
@@ -55,7 +58,7 @@ impl<DB: Database> InnerEvmContext<DB> {
             journaled_state: JournaledState::new(SpecId::LATEST, HashSet::new()),
             db,
             error: Ok(()),
-            #[cfg(feature = "optimism")]
+            #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: None,
         }
     }
@@ -68,7 +71,7 @@ impl<DB: Database> InnerEvmContext<DB> {
             journaled_state: JournaledState::new(SpecId::LATEST, HashSet::new()),
             db,
             error: Ok(()),
-            #[cfg(feature = "optimism")]
+            #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: None,
         }
     }
@@ -83,7 +86,7 @@ impl<DB: Database> InnerEvmContext<DB> {
             journaled_state: self.journaled_state,
             db,
             error: Ok(()),
-            #[cfg(feature = "optimism")]
+            #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: self.l1_block_info,
         }
     }
@@ -216,6 +219,17 @@ impl<DB: Database> InnerEvmContext<DB> {
         ))
     }
 
+    #[inline]
+    #[cfg(feature = "morph")]
+    pub fn code_size(&mut self, address: Address) -> Result<(usize, bool), EVMError<DB::Error>> {
+        self.journaled_state
+            .load_account(address, &mut self.db)
+            .map(|acc| (acc.info.code_size, acc.is_cold))
+    }
+
+    /// Get code hash of address.
+    ///
+
     /// Get code hash of address.
     ///
     /// In case of EOF account it will return `EOF_MAGIC_HASH`
@@ -225,41 +239,53 @@ impl<DB: Database> InnerEvmContext<DB> {
         &mut self,
         address: Address,
     ) -> Result<Eip7702CodeLoad<B256>, EVMError<DB::Error>> {
+        #[cfg(not(feature = "morph"))]
         let acc = self.journaled_state.load_code(address, &mut self.db)?;
+        // Morph does not support EOF yet, code won't be loaded if only EXTCODEHASH is called.
+        #[cfg(feature = "morph")]
+        let acc = self.journaled_state.load_account(address, &mut self.db)?;
         if acc.is_empty() {
             return Ok(Eip7702CodeLoad::new_not_delegated(B256::ZERO, acc.is_cold));
         }
-        // SAFETY: safe to unwrap as load_code will insert code if it is empty.
-        let code = acc.info.code.as_ref().unwrap();
 
-        // If bytecode is EIP-7702 then we need to load the delegated account.
-        if let Bytecode::Eip7702(code) = code {
-            let address = code.address();
-            let is_cold = acc.is_cold;
+        cfg_if::cfg_if! {
+            if #[cfg(not(feature = "morph"))] {
+                 // SAFETY: safe to unwrap as load_code will insert code if it is empty.
+                let code = acc.info.code.as_ref().unwrap();
 
-            let delegated_account = self.journaled_state.load_code(address, &mut self.db)?;
+                // If bytecode is EIP-7702 then we need to load the delegated account.
+                if let Bytecode::Eip7702(code) = code {
+                    let address = code.address();
+                    let is_cold = acc.is_cold;
 
-            let hash = if delegated_account.is_empty() {
-                B256::ZERO
-            } else if delegated_account.info.code.as_ref().unwrap().is_eof() {
-                EOF_MAGIC_HASH
+                    let delegated_account = self.journaled_state.load_code(address, &mut self.db)?;
+
+                    let hash = if delegated_account.is_empty() {
+                        B256::ZERO
+                    } else if delegated_account.info.code.as_ref().unwrap().is_eof() {
+                        crate::primitives::EOF_MAGIC_HASH
+                    } else {
+                        delegated_account.info.code_hash
+                    };
+
+                    return Ok(Eip7702CodeLoad::new(
+                        StateLoad::new(hash, is_cold),
+                        delegated_account.is_cold,
+                    ));
+                }
+
+                let hash = if code.is_eof() {
+                    crate::primitives::EOF_MAGIC_HASH
+                } else {
+                    acc.info.code_hash
+                };
+
+                Ok(Eip7702CodeLoad::new_not_delegated(hash, acc.is_cold))
             } else {
-                delegated_account.info.code_hash
-            };
-
-            return Ok(Eip7702CodeLoad::new(
-                StateLoad::new(hash, is_cold),
-                delegated_account.is_cold,
-            ));
+                // Morph does not support EOF yet
+                Ok(Eip7702CodeLoad::new_not_delegated(acc.info.code_hash, acc.is_cold))
+            }
         }
-
-        let hash = if code.is_eof() {
-            EOF_MAGIC_HASH
-        } else {
-            acc.info.code_hash
-        };
-
-        Ok(Eip7702CodeLoad::new_not_delegated(hash, acc.is_cold))
     }
 
     /// Load storage slot, if storage is not present inside the account then it will be loaded from database.

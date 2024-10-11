@@ -27,6 +27,10 @@ pub trait Host {
     /// Get code hash of `address` and if the account is cold.
     fn code_hash(&mut self, address: Address) -> Option<Eip7702CodeLoad<B256>>;
 
+    #[cfg(feature = "morph")]
+    /// Get code size of `address` and if the account is cold.
+    fn code_size(&mut self, address: Address) -> Option<(usize, bool)>;
+
     /// Get storage value of `address` at `index` and if the account is cold.
     fn sload(&mut self, address: Address, index: U256) -> Option<StateLoad<U256>>;
 

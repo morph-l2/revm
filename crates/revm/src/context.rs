@@ -152,6 +152,14 @@ impl<EXT, DB: Database> Host for Context<EXT, DB> {
             .ok()
     }
 
+    #[cfg(feature = "morph")]
+    fn code_size(&mut self, address: Address) -> Option<(usize, bool)> {
+        self.evm
+            .code_size(address)
+            .map_err(|e| self.evm.error = Err(e))
+            .ok()
+    }
+
     fn code_hash(&mut self, address: Address) -> Option<Eip7702CodeLoad<B256>> {
         self.evm
             .code_hash(address)

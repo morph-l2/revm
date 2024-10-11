@@ -73,7 +73,7 @@ serde_json = "1.0"
 serde_derive = "1.0"
 
 [features]
-default = ["std", "c-kzg", "secp256k1", "portable", "blst"]
+default = ["std", "kzg-rs", "portable"]
 std = [
     "revm-primitives/std",
     "k256/std",
@@ -96,6 +96,16 @@ negate-optimism-default-handler = [
     "revm-primitives/negate-optimism-default-handler",
 ]
 
+morph = ["revm-primitives/morph"]
+# Morph default handler enabled Morph handler register by default in EvmBuilder.
+morph-default-handler = [
+    "morph",
+    "revm-primitives/morph-default-handler",
+]
+negate-morph-default-handler = [
+    "revm-primitives/negate-morph-default-handler",
+]
+
 # Enables the p256verify precompile.
 secp256r1 = ["dep:p256"]
 
@@ -115,6 +125,16 @@ secp256k1 = ["dep:secp256k1"]
 
 # Enables the BLS12-381 precompiles.
 blst = ["dep:blst"]
+
+all = [
+    "std",
+    "hashbrown",
+    "asm-keccak",
+    "secp256r1",
+    "c-kzg",
+    "portable",
+    "secp256k1",
+]
 
 [[bench]]
 name = "bench"

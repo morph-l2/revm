@@ -7,6 +7,15 @@ use crate::Database;
 use core::convert::Infallible;
 use std::vec::Vec;
 
+#[cfg(not(feature = "ordered-cache-db"))]
+use crate::primitives::hash_map::Entry as DbMapEntry;
+#[cfg(not(feature = "ordered-cache-db"))]
+use crate::primitives::HashMap as DbMap;
+#[cfg(feature = "ordered-cache-db")]
+use std::collections::btree_map::Entry as DbMapEntry;
+#[cfg(feature = "ordered-cache-db")]
+use std::collections::BTreeMap as DbMap;
+
 /// A [Database] implementation that stores all state changes in memory.
 pub type InMemoryDB = CacheDB<EmptyDB>;
 
@@ -22,7 +31,7 @@ pub type InMemoryDB = CacheDB<EmptyDB>;
 pub struct CacheDB<ExtDB> {
     /// Account info where None means it is not existing. Not existing state is needed for Pre TANGERINE forks.
     /// `code` is always `None`, and bytecode can be found in `contracts`.
-    pub accounts: HashMap<Address, DbAccount>,
+    pub accounts: DbMap<Address, DbAccount>,
     /// Tracks all contracts by their code hash.
     pub contracts: HashMap<B256, Bytecode>,
     /// All logs that were committed via [DatabaseCommit::commit].
@@ -47,7 +56,7 @@ impl<ExtDB> CacheDB<ExtDB> {
         contracts.insert(KECCAK_EMPTY, Bytecode::default());
         contracts.insert(B256::ZERO, Bytecode::default());
         Self {
-            accounts: HashMap::new(),
+            accounts: DbMap::new(),
             contracts,
             logs: Vec::default(),
             block_hashes: HashMap::new(),
@@ -65,6 +74,18 @@ impl<ExtDB> CacheDB<ExtDB> {
             if !code.is_empty() {
                 if account.code_hash == KECCAK_EMPTY {
                     account.code_hash = code.hash_slow();
+                }
+                #[cfg(feature = "morph")]
+                {
+                    account.code_size = code.len();
+                    #[cfg(feature = "morph-poseidon-codehash")]
+                    {
+                        if account.poseidon_code_hash == crate::primitives::POSEIDON_EMPTY
+                            || account.poseidon_code_hash == B256::ZERO
+                        {
+                            account.poseidon_code_hash = code.poseidon_hash_slow();
+                        }
+                    }
                 }
                 self.contracts
                     .entry(account.code_hash)
@@ -90,8 +111,8 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     pub fn load_account(&mut self, address: Address) -> Result<&mut DbAccount, ExtDB::Error> {
         let db = &self.db;
         match self.accounts.entry(address) {
-            Entry::Occupied(entry) => Ok(entry.into_mut()),
-            Entry::Vacant(entry) => Ok(entry.insert(
+            DbMapEntry::Occupied(entry) => Ok(entry.into_mut()),
+            DbMapEntry::Vacant(entry) => Ok(entry.insert(
                 db.basic_ref(address)?
                     .map(|info| DbAccount {
                         info,
@@ -170,8 +191,8 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         let basic = match self.accounts.entry(address) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(
+            DbMapEntry::Occupied(entry) => entry.into_mut(),
+            DbMapEntry::Vacant(entry) => entry.insert(
                 self.db
                     .basic_ref(address)?
                     .map(|info| DbAccount {
@@ -199,11 +220,11 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     /// It is assumed that account is already loaded.
     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
         match self.accounts.entry(address) {
-            Entry::Occupied(mut acc_entry) => {
+            DbMapEntry::Occupied(mut acc_entry) => {
                 let acc_entry = acc_entry.get_mut();
                 match acc_entry.storage.entry(index) {
-                    Entry::Occupied(entry) => Ok(*entry.get()),
-                    Entry::Vacant(entry) => {
+                    DbMapEntry::Occupied(entry) => Ok(*entry.get()),
+                    DbMapEntry::Vacant(entry) => {
                         if matches!(
                             acc_entry.account_state,
                             AccountState::StorageCleared | AccountState::NotExisting
@@ -217,7 +238,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
                     }
                 }
             }
-            Entry::Vacant(acc_entry) => {
+            DbMapEntry::Vacant(acc_entry) => {
                 // acc needs to be loaded for us to access slots.
                 let info = self.db.basic_ref(address)?;
                 let (account, value) = if info.is_some() {
@@ -297,7 +318,7 @@ pub struct DbAccount {
     /// If account is selfdestructed or newly created, storage will be cleared.
     pub account_state: AccountState,
     /// storage slots
-    pub storage: HashMap<U256, U256>,
+    pub storage: DbMap<U256, U256>,
 }
 
 impl DbAccount {
@@ -359,13 +380,28 @@ impl AccountState {
 /// Custom benchmarking DB that only has account info for the zero address.
 ///
 /// Any other address will return an empty account.
+#[cfg(not(feature = "morph-poseidon-codehash"))]
 #[derive(Debug, Default, Clone)]
 pub struct BenchmarkDB(pub Bytecode, B256);
+
+/// Custom benchmarking DB that only has account info for the zero address.
+///
+/// Any other address will return an empty account.
+#[cfg(feature = "morph-poseidon-codehash")]
+#[derive(Debug, Default, Clone)]
+pub struct BenchmarkDB(pub Bytecode, B256, B256);
 
 impl BenchmarkDB {
     pub fn new_bytecode(bytecode: Bytecode) -> Self {
         let hash = bytecode.hash_slow();
-        Self(bytecode, hash)
+        cfg_if::cfg_if! {
+            if #[cfg(not(feature = "morph-poseidon-codehash"))] {
+                Self(bytecode, hash)
+            } else {
+                let poseidon_hash = bytecode.poseidon_hash_slow();
+                Self(bytecode, hash, poseidon_hash)
+            }
+        }
     }
 }
 
@@ -377,16 +413,19 @@ impl Database for BenchmarkDB {
             return Ok(Some(AccountInfo {
                 nonce: 1,
                 balance: U256::from(10000000),
+                #[cfg(feature = "morph")]
+                code_size: self.0.len(),
                 code: Some(self.0.clone()),
                 code_hash: self.1,
+                #[cfg(feature = "morph-poseidon-codehash")]
+                poseidon_code_hash: self.2,
             }));
         }
         if address == Address::with_last_byte(1) {
             return Ok(Some(AccountInfo {
                 nonce: 0,
                 balance: U256::from(10000000),
-                code: None,
-                code_hash: KECCAK_EMPTY,
+                ..Default::default()
             }));
         }
         Ok(None)

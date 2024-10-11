@@ -1,11 +1,21 @@
 use crate::{
     b256, B256, BLOB_GASPRICE_UPDATE_FRACTION, MIN_BLOB_GASPRICE, TARGET_BLOB_GAS_PER_BLOCK,
 };
-pub use alloy_primitives::keccak256;
+pub use alloy_primitives::{keccak256, Keccak256};
 
 /// The Keccak-256 hash of the empty string `""`.
 pub const KECCAK_EMPTY: B256 =
     b256!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
+
+#[cfg(feature = "morph-poseidon-codehash")]
+pub const POSEIDON_EMPTY: B256 =
+    b256!("2098f5fb9e239eab3ceac3f27b81e481dc3124d55ffed523a839ee8446b64864");
+
+/// Poseidon code hash
+#[cfg(feature = "morph-poseidon-codehash")]
+pub fn poseidon(code: &[u8]) -> B256 {
+    poseidon_bn254::hash_code(code).into()
+}
 
 /// Calculates the `excess_blob_gas` from the parent header's `blob_gas_used` and `excess_blob_gas`.
 ///

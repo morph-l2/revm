@@ -47,6 +47,35 @@ pub mod pair {
 
     pub const ADDRESS: Address = crate::u64_to_address(8);
 
+    #[cfg(feature = "morph")]
+    mod morph {
+        use crate::{Precompile, PrecompileWithAddress};
+
+        /// The number of pairing inputs per pairing operation. If the inputs provided to the precompile
+        /// call are < 4, we append (G1::infinity, G2::generator) until we have the required no. of inputs.
+        const N_PAIRING_PER_OP: usize = 4;
+
+        /// The number of bytes taken to represent a pair (G1, G2).
+        const N_BYTES_PER_PAIR: usize = 192;
+
+        pub const BERNOULLI: PrecompileWithAddress = PrecompileWithAddress(
+            super::ADDRESS,
+            Precompile::Standard(|input, gas_limit| {
+                if input.len() > N_PAIRING_PER_OP * N_BYTES_PER_PAIR {
+                    return Err(crate::PrecompileError::NotImplemented.into());
+                }
+                super::run_pair(
+                    input,
+                    super::ISTANBUL_PAIR_PER_POINT,
+                    super::ISTANBUL_PAIR_BASE,
+                    gas_limit,
+                )
+            }),
+        );
+    }
+    #[cfg(feature = "morph")]
+    pub use morph::*;
+
     pub const ISTANBUL_PAIR_PER_POINT: u64 = 34_000;
     pub const ISTANBUL_PAIR_BASE: u64 = 45_000;
     pub const ISTANBUL: PrecompileWithAddress = PrecompileWithAddress(

@@ -67,7 +67,7 @@ rstest = "0.22.0"
 alloy-provider = "0.3"
 
 [features]
-default = ["std", "c-kzg", "secp256k1", "portable", "blst"]
+default = ["std", "kzg-rs", "portable"]
 std = [
     "serde?/std",
     "serde_json?/std",
@@ -83,6 +83,7 @@ asm-keccak = ["revm-interpreter/asm-keccak", "revm-precompile/asm-keccak"]
 portable = ["revm-precompile/portable", "revm-interpreter/portable"]
 
 test-utils = []
+ordered-cache-db = []
 
 optimism = ["revm-interpreter/optimism", "revm-precompile/optimism"]
 # Optimism default handler enabled Optimism handler register by default in EvmBuilder.
@@ -94,6 +95,22 @@ optimism-default-handler = [
 negate-optimism-default-handler = [
     "revm-precompile/negate-optimism-default-handler",
     "revm-interpreter/negate-optimism-default-handler",
+]
+
+morph = ["revm-interpreter/morph", "revm-precompile/morph"]
+# Morph default handler enabled Morph handler register by default in EvmBuilder.
+morph-default-handler = [
+    "morph",
+    "revm-precompile/morph-default-handler",
+    "revm-interpreter/morph-default-handler",
+]
+negate-morph-default-handler = [
+    "revm-precompile/negate-morph-default-handler",
+    "revm-interpreter/negate-morph-default-handler",
+]
+morph-poseidon-codehash = [
+    "morph",
+    "revm-interpreter/morph-poseidon-codehash",
 ]
 
 ethersdb = ["std", "dep:tokio", "dep:ethers-providers", "dep:ethers-core"]
@@ -129,6 +146,21 @@ c-kzg = ["revm-precompile/c-kzg"]
 # `kzg-rs` is not audited but useful for `no_std` environment, use it with causing and default to `c-kzg` if possible.
 kzg-rs = ["revm-precompile/kzg-rs"]
 blst = ["revm-precompile/blst"]
+
+all = [
+    "std",
+    "hashbrown",
+    "serde",
+    "serde-json",
+    "arbitrary",
+    "asm-keccak",
+    "portable",
+    "ethersdb",
+    "alloydb",
+    "dev",
+    "revm-interpreter/all",
+    "revm-precompile/all",
+]
 
 [[example]]
 name = "fork_ref_transact"

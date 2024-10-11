@@ -94,8 +94,16 @@ impl Env {
     pub fn validate_tx<SPEC: Spec>(&self) -> Result<(), InvalidTransaction> {
         // Check if the transaction's chain id is correct
         if let Some(tx_chain_id) = self.tx.chain_id {
-            if tx_chain_id != self.cfg.chain_id {
-                return Err(InvalidTransaction::InvalidChainId);
+            cfg_if::cfg_if! {
+                if #[cfg(not(feature = "morph"))] {
+                    if tx_chain_id != self.cfg.chain_id {
+                        return Err(InvalidTransaction::InvalidChainId);
+                    }
+                } else {
+                    if !self.tx.morph.is_l1_msg && tx_chain_id != self.cfg.chain_id {
+                        return Err(InvalidTransaction::InvalidChainId);
+                    }
+                }
             }
         }
 
@@ -599,6 +607,11 @@ pub struct TxEnv {
     #[cfg(feature = "optimism")]
     /// Optimism fields.
     pub optimism: OptimismFields,
+
+    #[cfg_attr(feature = "serde", serde(flatten))]
+    #[cfg(feature = "morph")]
+    /// Morph fields
+    pub morph: MorphFields,
 }
 
 pub enum TxType {
@@ -642,6 +655,8 @@ impl Default for TxEnv {
             authorization_list: None,
             #[cfg(feature = "optimism")]
             optimism: OptimismFields::default(),
+            #[cfg(feature = "morph")]
+            morph: MorphFields::default(),
         }
     }
 }
@@ -703,6 +718,17 @@ pub struct OptimismFields {
     /// for non-optimism chains when the `optimism` feature is enabled,
     /// but the [CfgEnv] `optimism` field is set to false.
     pub enveloped_tx: Option<Bytes>,
+}
+
+/// Additional [TxEnv] fields for morph.
+#[cfg(feature = "morph")]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct MorphFields {
+    pub is_l1_msg: bool,
+    /// The RLP-encoded bytes of the transaction. This is used
+    /// to compute the L1 tx cost using the L1 block info.
+    pub rlp_bytes: Option<Bytes>,
 }
 
 /// Transaction destination

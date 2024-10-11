@@ -37,10 +37,8 @@ macro_rules! require_init_eof {
 #[macro_export]
 macro_rules! check {
     ($interp:expr, $min:ident) => {
-        if const {
-            !<SPEC as $crate::primitives::Spec>::SPEC_ID
-                .is_enabled_in($crate::primitives::SpecId::$min)
-        } {
+        // TODO: Force const-eval on the condition with a `const {}` block once they are stable
+        if !<SPEC as $crate::primitives::Spec>::enabled($crate::primitives::SpecId::$min) {
             $interp.instruction_result = $crate::InstructionResult::NotActivated;
             return;
         }
@@ -337,6 +335,43 @@ macro_rules! as_usize_or_fail_ret {
         match $v.as_limbs() {
             x => {
                 if (x[0] > usize::MAX as u64) | (x[1] != 0) | (x[2] != 0) | (x[3] != 0) {
+                    $interp.instruction_result = $reason;
+                    return $ret;
+                }
+                x[0] as usize
+            }
+        }
+    };
+}
+
+/// Converts a `U256` value to a `u64`, failing the instruction if the value is too large.
+#[macro_export]
+macro_rules! as_u64_or_fail {
+    ($interp:expr, $v:expr) => {
+        $crate::as_u64_or_fail_ret!($interp, $v, ())
+    };
+    ($interp:expr, $v:expr, $reason:expr) => {
+        $crate::as_u64_or_fail_ret!($interp, $v, $reason, ())
+    };
+}
+
+/// Converts a `U256` value to a `usize` and returns `ret`,
+/// failing the instruction if the value is too large.
+#[macro_export]
+macro_rules! as_u64_or_fail_ret {
+    ($interp:expr, $v:expr, $ret:expr) => {
+        $crate::as_u64_or_fail_ret!(
+            $interp,
+            $v,
+            $crate::InstructionResult::InvalidOperandOOG,
+            $ret
+        )
+    };
+
+    ($interp:expr, $v:expr, $reason:expr, $ret:expr) => {
+        match $v.as_limbs() {
+            x => {
+                if (x[0] > u64::MAX) | (x[1] != 0) | (x[2] != 0) | (x[3] != 0) {
                     $interp.instruction_result = $reason;
                     return $ret;
                 }
