@@ -49,7 +49,7 @@ pub fn validate_initial_tx_gas<SPEC: Spec, DB: Database>(
         .map(|l| l.len() as u64)
         .unwrap_or_default();
 
-    let initial_gas_spend = gas::validate_initial_tx_gas(
+    let mut initial_gas_spend = gas::validate_initial_tx_gas(
         SPEC::SPEC_ID,
         input,
         is_create,
@@ -59,15 +59,18 @@ pub fn validate_initial_tx_gas<SPEC: Spec, DB: Database>(
 
     // Additional check to see if limit is big enough to cover initial gas.
     // skip check for l1 message
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "morph")] {
-            if self.tx.morph.is_l1_msg {
-                initial_gas_spend = env.tx.gas_limit
+    if initial_gas_spend > env.tx.gas_limit {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "morph")] {
+                if !env.tx.morph.is_l1_msg {
+                    initial_gas_spend = env.tx.gas_limit
+                } else {
+                    return Err(InvalidTransaction::CallGasCostMoreThanGasLimit.into());
+                }
+            } else {
+                return Err(InvalidTransaction::CallGasCostMoreThanGasLimit.into());
             }
         }
-    }
-    if initial_gas_spend > env.tx.gas_limit {
-        return Err(InvalidTransaction::CallGasCostMoreThanGasLimit.into());
     }
     Ok(initial_gas_spend)
 }
