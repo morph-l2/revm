@@ -278,10 +278,21 @@ impl Env {
                 // Add transaction cost to balance to ensure execution doesn't fail.
                 account.info.balance = balance_check;
             } else {
-                return Err(InvalidTransaction::LackOfFundForMaxFee {
-                    fee: Box::new(balance_check),
-                    balance: Box::new(account.info.balance),
-                });
+                cfg_if::cfg_if! {
+                    if #[cfg(not(feature = "morph"))] {
+                        return Err(InvalidTransaction::LackOfFundForMaxFee {
+                            fee: Box::new(balance_check),
+                            balance: Box::new(account.info.balance),
+                        });
+                    } else {
+                        if !self.tx.morph.is_l1_msg {
+                            return Err(InvalidTransaction::LackOfFundForMaxFee {
+                                fee: Box::new(balance_check),
+                                balance: Box::new(account.info.balance),
+                            });
+                        }
+                    }
+                }
             }
         }
 
