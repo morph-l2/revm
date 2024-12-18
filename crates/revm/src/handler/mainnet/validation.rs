@@ -69,6 +69,5 @@ pub fn validate_initial_tx_gas<SPEC: Spec, DB: Database>(
     if initial_gas_spend > env.tx.gas_limit {
         return Err(InvalidTransaction::CallGasCostMoreThanGasLimit.into());
     }
-    
     Ok(initial_gas_spend)
 }
