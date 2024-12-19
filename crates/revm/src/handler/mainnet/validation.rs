@@ -58,17 +58,17 @@ pub fn validate_initial_tx_gas<SPEC: Spec, DB: Database>(
     );
 
     // Additional check to see if limit is big enough to cover initial gas.
-    // skip check for l1 message
     if initial_gas_spend > env.tx.gas_limit {
         cfg_if::cfg_if! {
-            if #[cfg(feature = "morph")] {
-                if !env.tx.morph.is_l1_msg {
+            if #[cfg(not(feature = "morph"))] {
+                return Err(InvalidTransaction::CallGasCostMoreThanGasLimit.into());
+            } else {
+                // reset initial gas spend for l1 message to ensure execution doesn't fail
+                if env.tx.morph.is_l1_msg {
                     initial_gas_spend = env.tx.gas_limit
                 } else {
                     return Err(InvalidTransaction::CallGasCostMoreThanGasLimit.into());
                 }
-            } else {
-                return Err(InvalidTransaction::CallGasCostMoreThanGasLimit.into());
             }
         }
     }
