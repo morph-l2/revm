@@ -274,17 +274,30 @@ impl Env {
         // Check if account has enough balance for gas_limit*gas_price and value transfer.
         // Transfer will be done inside `*_inner` functions.
         if balance_check > account.info.balance {
-            if self.cfg.is_balance_check_disabled() {
-                // Add transaction cost to balance to ensure execution doesn't fail.
-                account.info.balance = balance_check;
-            } else {
-                return Err(InvalidTransaction::LackOfFundForMaxFee {
-                    fee: Box::new(balance_check),
-                    balance: Box::new(account.info.balance),
-                });
+            cfg_if::cfg_if! {
+                if #[cfg(not(feature = "morph"))] {
+                    if self.cfg.is_balance_check_disabled() {
+                        // Add transaction cost to balance to ensure execution doesn't fail.
+                        account.info.balance = balance_check;
+                    } else {
+                        return Err(InvalidTransaction::LackOfFundForMaxFee {
+                            fee: Box::new(balance_check),
+                            balance: Box::new(account.info.balance),
+                        });
+                    }
+                } else {
+                    if self.cfg.is_balance_check_disabled() || self.tx.morph.is_l1_msg {
+                        // Add transaction cost to balance to ensure execution doesn't fail.
+                        account.info.balance = balance_check;
+                    } else {
+                        return Err(InvalidTransaction::LackOfFundForMaxFee {
+                            fee: Box::new(balance_check),
+                            balance: Box::new(account.info.balance),
+                        });
+                    }
+                }
             }
         }
-
         Ok(())
     }
 }
