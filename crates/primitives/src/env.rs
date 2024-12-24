@@ -286,10 +286,10 @@ impl Env {
                         });
                     }
                 } else {
-                    if self.cfg.is_balance_check_disabled() || self.tx.morph.is_l1_msg {
+                    if self.cfg.is_balance_check_disabled() {
                         // Add transaction cost to balance to ensure execution doesn't fail.
                         account.info.balance = balance_check;
-                    } else {
+                    } else if !self.tx.morph.is_l1_msg{
                         return Err(InvalidTransaction::LackOfFundForMaxFee {
                             fee: Box::new(balance_check),
                             balance: Box::new(account.info.balance),
