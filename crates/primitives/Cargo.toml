@@ -51,7 +51,8 @@ serde = { version = "1.0", default-features = false, features = [
 ], optional = true }
 
 # morph
-poseidon-bn254 = { git = "https://github.com/scroll-tech/poseidon-bn254", branch = "master", features = ["bn254"], optional = true }
+# poseidon-bn254 = { git = "https://github.com/scroll-tech/poseidon-bn254", branch = "master", features = ["bn254"], optional = true }
+poseidon-bn254 = { git = "https://github.com/morph-l2/poseidon-bn254", branch = "main", features = ["bn254"] ,optional = true}
 
 # sp1
 getrandom = { version = "*", features = ["custom"] } # just for disable
