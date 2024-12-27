@@ -811,7 +811,7 @@ dependencies = [
 [[package]]
 name = "bn254"
 version = "0.1.0"
-source = "git+https://github.com/scroll-tech/bn254#81e1dcc92ee9a2798b13b84b24de182e9c42256e"
+source = "git+https://github.com/Wel15/bn254.git#2ed3fbe4118f004592280f86ef33624aa5ad97aa"
 dependencies = [
  "ff",
  "getrandom",
@@ -2804,7 +2804,7 @@ checksum = "7170ef9988bc169ba16dd36a7fa041e5c4cbeb6a35b76d4c03daded371eae7c0"
 [[package]]
 name = "poseidon-bn254"
 version = "0.1.0"
-source = "git+https://github.com/morph-l2/poseidon-bn254?branch=sp1_compile#3fc7b71dabcbbae2d4803eb26f59105c76b4171a"
+source = "git+https://github.com/morph-l2/poseidon-bn254?branch=main#f23c0cfcefefefcac4a8f050170a39212a4ddf18"
 dependencies = [
  "bn254",
  "itertools 0.13.0",
@@ -3820,7 +3820,7 @@ dependencies = [
 [[package]]
 name = "sp1-intrinsics"
 version = "0.0.0"
-source = "git+https://github.com/scroll-tech/sp1-intrinsics.git?branch=master#7e038e60db0b2e847f6d8f49e148ccac8c6fc394"
+source = "git+https://github.com/Wel15/sp1-intrinsics.git?branch=master#6312ff3c940b7b9d82bd61be8c6222b0cade2847"
 dependencies = [
  "cfg-if",
 ]
