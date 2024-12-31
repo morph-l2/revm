@@ -811,7 +811,7 @@ dependencies = [
 [[package]]
 name = "bn254"
 version = "0.1.0"
-source = "git+https://github.com/Wel15/bn254.git#2ed3fbe4118f004592280f86ef33624aa5ad97aa"
+source = "git+https://github.com/Wel15/bn254?rev=f6fb66cd180bd02c79ff5a72ccef2a6462c33415#f6fb66cd180bd02c79ff5a72ccef2a6462c33415"
 dependencies = [
  "ff",
  "getrandom",
@@ -2804,7 +2804,7 @@ checksum = "7170ef9988bc169ba16dd36a7fa041e5c4cbeb6a35b76d4c03daded371eae7c0"
 [[package]]
 name = "poseidon-bn254"
 version = "0.1.0"
-source = "git+https://github.com/morph-l2/poseidon-bn254?branch=main#f23c0cfcefefefcac4a8f050170a39212a4ddf18"
+source = "git+https://github.com/morph-l2/poseidon-bn254?branch=main#449524c21051eb91a208f90822bfcb6e3839b473"
 dependencies = [
  "bn254",
  "itertools 0.13.0",
