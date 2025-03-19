@@ -110,9 +110,10 @@ pub enum SpecId {
     /// Although the Curie update include new opcodes in Cancun, the most important change
     /// `EIP-4844` is not included. So we sort it before Cancun.
     CURIE = 19,
-    CANCUN = 20,
-    PRAGUE = 21,
-    PRAGUE_EOF = 22,
+    MORPH203 = 20, // revert Precompiles: RIPEMD-160, point evaluation, modexp, ecPairing
+    CANCUN = 21,
+    PRAGUE = 22,
+    PRAGUE_EOF = 23,
     #[default]
     LATEST = u8::MAX,
 }
@@ -174,6 +175,8 @@ impl From<&str> for SpecId {
             "Bernoulli" => SpecId::BERNOULLI,
             #[cfg(feature = "morph")]
             "Curie" => SpecId::CURIE,
+            #[cfg(feature = "morph")]
+            "Morph203" => SpecId::MORPH203,
             _ => Self::LATEST,
         }
     }
@@ -220,6 +223,8 @@ impl From<SpecId> for &'static str {
             SpecId::BERNOULLI => "Bernoulli",
             #[cfg(feature = "morph")]
             SpecId::CURIE => "Curie",
+            #[cfg(feature = "morph")]
+            SpecId::MORPH203 => "Morph203",
             SpecId::LATEST => "Latest",
         }
     }
@@ -289,6 +294,8 @@ spec!(GRANITE, GraniteSpec);
 spec!(PRE_BERNOULLI, PreBernoulliSpec);
 #[cfg(feature = "morph")]
 spec!(BERNOULLI, BernoulliSpec);
+#[cfg(feature = "morph")]
+spec!(MORPH203, Morph203Spec);
 #[cfg(feature = "morph")]
 spec!(CURIE, CurieSpec);
 
@@ -534,6 +541,10 @@ macro_rules! spec_to_generic {
                 use $crate::BernoulliSpec as SPEC;
                 $e
             }
+            $crate::SpecId::MORPH203 => {
+                use $crate::Morph203Spec as SPEC;
+                $e
+            }
             $crate::SpecId::CURIE => {
                 use $crate::CurieSpec as SPEC;
                 $e
@@ -577,6 +588,8 @@ mod tests {
         spec_to_generic!(PRE_BERNOULLI, assert_eq!(SPEC::SPEC_ID, PRE_BERNOULLI));
         #[cfg(feature = "morph")]
         spec_to_generic!(BERNOULLI, assert_eq!(SPEC::SPEC_ID, BERNOULLI));
+        #[cfg(feature = "morph")]
+        spec_to_generic!(MORPH203, assert_eq!(SPEC::SPEC_ID, MORPH203));
         #[cfg(feature = "morph")]
         spec_to_generic!(CURIE, assert_eq!(SPEC::SPEC_ID, CURIE));
         spec_to_generic!(CANCUN, assert_eq!(SPEC::SPEC_ID, CANCUN));

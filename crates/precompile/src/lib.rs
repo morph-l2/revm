@@ -41,7 +41,7 @@ use once_cell::race::OnceBox;
 use std::{boxed::Box, vec::Vec};
 
 pub fn calc_linear_cost_u32(len: usize, base: u64, word: u64) -> u64 {
-    (len as u64 + 32 - 1) / 32 * word + base
+    (len as u64).div_ceil(32) * word + base
 }
 
 #[derive(Clone, Default, Debug)]
@@ -64,6 +64,8 @@ impl Precompiles {
             PrecompileSpecId::PRE_BERNOULLI => Self::pre_bernoulli(),
             #[cfg(feature = "morph")]
             PrecompileSpecId::BERNOULLI => Self::bernoulli(),
+            #[cfg(feature = "morph")]
+            PrecompileSpecId::MORPH203 => Self::morph203(),
             PrecompileSpecId::CANCUN => Self::cancun(),
             PrecompileSpecId::PRAGUE => Self::prague(),
             PrecompileSpecId::LATEST => Self::latest(),
@@ -217,6 +219,22 @@ impl Precompiles {
         })
     }
 
+    /// Returns precompiles for Morph
+    #[cfg(feature = "morph")]
+    pub fn morph203() -> &'static Self {
+        static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+        INSTANCE.get_or_init(|| {
+            let mut precompiles = Self::bernoulli().clone();
+            precompiles.extend([
+                hash::RIPEMD160,       // 0x03
+                modexp::BERLIN,        // 0x05
+                bn128::pair::ISTANBUL, // 0x08
+                blake2::FUN,           // 0x09
+            ]);
+            Box::new(precompiles)
+        })
+    }
+
     /// Returns the precompiles for the latest spec.
     pub fn latest() -> &'static Self {
         Self::prague()
@@ -318,6 +336,8 @@ pub enum PrecompileSpecId {
     PRE_BERNOULLI,
     #[cfg(feature = "morph")]
     BERNOULLI,
+    #[cfg(feature = "morph")]
+    MORPH203,
     CANCUN,
     PRAGUE,
     LATEST,
@@ -345,6 +365,8 @@ impl PrecompileSpecId {
             PRE_BERNOULLI => Self::PRE_BERNOULLI,
             #[cfg(feature = "morph")]
             BERNOULLI | CURIE => Self::BERNOULLI,
+            #[cfg(feature = "morph")]
+            MORPH203 => Self::MORPH203,
         }
     }
 }
