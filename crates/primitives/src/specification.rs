@@ -110,10 +110,10 @@ pub enum SpecId {
     /// Although the Curie update include new opcodes in Cancun, the most important change
     /// `EIP-4844` is not included. So we sort it before Cancun.
     CURIE = 19,
-    CANCUN = 20,
-    PRAGUE = 21,
-    PRAGUE_EOF = 22,
-    MORPH203 = 23, // revert Precompiles: RIPEMD-160, point evaluation, modexp, ecPairing
+    MORPH203 = 20, // revert Precompiles: RIPEMD-160, point evaluation, modexp, ecPairing
+    CANCUN = 21,
+    PRAGUE = 22,
+    PRAGUE_EOF = 23,
     #[default]
     LATEST = u8::MAX,
 }
