@@ -11,9 +11,19 @@ use crate::{
     },
     Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult,
 };
+
+#[cfg(feature = "morph")]
+use crate::{
+    morph::{
+        generate_mint_inflations_input, generate_record_blocks_input, load_inflation_minted_epochs,
+        load_reward_start_time, load_reward_started, L2_STAKING_ADDRESS, MORPH_TOKEN_ADDRESS,
+        REWARD_EPOCH, SYSTEM_ADDRESS,
+    },
+    primitives::U256,
+};
+
 use core::fmt;
 use std::{boxed::Box, vec::Vec};
-
 /// EVM call stack limit.
 pub const CALL_STACK_LIMIT: u64 = 1024;
 
@@ -46,6 +56,56 @@ impl<EXT, DB: Database + DatabaseCommit> Evm<'_, EXT, DB> {
         let ResultAndState { result, state } = self.transact()?;
         self.context.evm.db.commit(state);
         Ok(result)
+    }
+
+    pub fn process_block(&mut self, txns: Vec<TxEnv>) {
+        #[cfg(feature = "morph")]
+        let _ = self.start_hook();
+
+        for tx in txns {
+            self.context.evm.env.tx = tx;
+            let _ = self.transact_commit();
+        }
+    }
+
+    #[cfg(feature = "morph")]
+    fn start_hook(&mut self) -> Result<(), EVMError<DB::Error>> {
+        let reward_started = load_reward_started(&mut self.context)?;
+        if reward_started != U256::from(1) {
+            return Ok(());
+        }
+
+        let call_data = generate_record_blocks_input(self.block().coinbase);
+        self.context.evm.env.tx = TxEnv {
+            caller: SYSTEM_ADDRESS.into(),
+            gas_limit: u64::MAX,
+            transact_to: L2_STAKING_ADDRESS.into(),
+            data: call_data,
+            nonce: None,
+            chain_id: None,
+            ..Default::default()
+        };
+        let _ = self.transact();
+
+        let inflation_minted_epochs = load_inflation_minted_epochs(&mut self.context)?;
+        let reward_start_time = load_reward_start_time(&mut self.context)?;
+
+        if self.block().timestamp > reward_start_time
+            && (self.block().timestamp - reward_start_time) / REWARD_EPOCH > inflation_minted_epochs
+        {
+            let call_data = generate_mint_inflations_input();
+            self.context.evm.env.tx = TxEnv {
+                caller: SYSTEM_ADDRESS.into(),
+                gas_limit: u64::MAX,
+                transact_to: MORPH_TOKEN_ADDRESS.into(),
+                data: call_data,
+                nonce: None,
+                chain_id: None,
+                ..Default::default()
+            };
+            let _ = self.transact();
+        }
+        Ok(())
     }
 }
 
