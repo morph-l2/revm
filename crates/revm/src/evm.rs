@@ -69,7 +69,7 @@ impl<EXT, DB: Database + DatabaseCommit> Evm<'_, EXT, DB> {
     }
 
     #[cfg(feature = "morph")]
-    fn start_hook(&mut self) -> Result<(), EVMError<DB::Error>> {
+    fn start_hook(&mut self) -> Result<(), DB::Error> {
         let reward_started = load_reward_started(&mut self.context)?;
         if reward_started != U256::from(1) {
             return Ok(());

@@ -13,12 +13,12 @@ pub const REWARD_EPOCH: U256 = U256::from_limbs([86400u64, 0, 0, 0]);
 
 // MorphTokenAddress is the address of the morph token contract
 pub const MORPH_TOKEN_ADDRESS: Address = address!("5300000000000000000000000000000000000013");
-const INFLATION_MINTED_EPOCHS_SOLT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
+const INFLATION_MINTED_EPOCHS_SOLT: U256 = U256::from_limbs([8u64, 0, 0, 0]);
 
 // L2StakingAddress is the address of the l2 staking contract
 pub const L2_STAKING_ADDRESS: Address = address!("5300000000000000000000000000000000000015");
 const REWARD_STARTED_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
-const REWARD_START_TIME_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
+const REWARD_START_TIME_SLOT: U256 = U256::from_limbs([2u64, 0, 0, 0]);
 
 sol! {
     #[derive(Debug)]
@@ -34,51 +34,33 @@ sol! {
 
 pub fn load_reward_started<EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
-) -> Result<U256, EVMError<DB::Error>> {
+) -> Result<U256, DB::Error> {
     let reward_started = context
         .evm
-        .inner
-        .journaled_state
-        .sload(
-            L2_STAKING_ADDRESS,
-            REWARD_STARTED_SLOT,
-            &mut context.evm.inner.db,
-        )?
-        .data;
+        .db
+        .storage(L2_STAKING_ADDRESS, REWARD_STARTED_SLOT)?;
 
     Ok(reward_started)
 }
 
 pub fn load_inflation_minted_epochs<EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
-) -> Result<U256, EVMError<DB::Error>> {
+) -> Result<U256, DB::Error> {
     let inflation_minted_epochs = context
         .evm
-        .inner
-        .journaled_state
-        .sload(
-            MORPH_TOKEN_ADDRESS,
-            INFLATION_MINTED_EPOCHS_SOLT,
-            &mut context.evm.inner.db,
-        )?
-        .data;
+        .db
+        .storage(MORPH_TOKEN_ADDRESS, INFLATION_MINTED_EPOCHS_SOLT)?;
 
     Ok(inflation_minted_epochs)
 }
 
 pub fn load_reward_start_time<EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
-) -> Result<U256, EVMError<DB::Error>> {
+) -> Result<U256, DB::Error> {
     let reward_start_time = context
         .evm
-        .inner
-        .journaled_state
-        .sload(
-            L2_STAKING_ADDRESS,
-            REWARD_START_TIME_SLOT,
-            &mut context.evm.inner.db,
-        )?
-        .data;
+        .db
+        .storage(L2_STAKING_ADDRESS, REWARD_START_TIME_SLOT)?;
 
     Ok(reward_start_time)
 }
