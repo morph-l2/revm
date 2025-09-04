@@ -13,7 +13,7 @@ pub const EIP7702_VERSION: u8 = 0;
 /// Bytecode of delegated account, specified in EIP-7702
 ///
 /// Format of EIP-7702 bytecode consist of:
-/// 0xEF00 (MAGIC) + 0x00 (VERSION) + 20 bytes of address.
+/// 0xEF01 (MAGIC) + 0x00 (VERSION) + 20 bytes of address.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Eip7702Bytecode {
@@ -68,6 +68,12 @@ impl Eip7702Bytecode {
     pub fn address(&self) -> Address {
         self.delegated_address
     }
+
+    /// Return the EIP-7702 version of the delegated contract.
+    #[inline]
+    pub fn version(&self) -> u8 {
+        self.version
+    }
 }
 
 /// Bytecode errors.
@@ -93,8 +99,7 @@ impl fmt::Display for Eip7702DecodeError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Eip7702DecodeError {}
+impl core::error::Error for Eip7702DecodeError {}
 
 #[cfg(test)]
 mod tests {

@@ -11,7 +11,7 @@ pub use bytecode::{
 };
 
 // Base cost of updating authorized account.
-pub const PER_AUTH_BASE_COST: u64 = 2500;
+pub const PER_AUTH_BASE_COST: u64 = 12500;
 
 /// Cost of creating authorized account that was previously empty.
 pub const PER_EMPTY_ACCOUNT_COST: u64 = 25000;
