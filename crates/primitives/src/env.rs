@@ -200,8 +200,18 @@ impl Env {
         }
 
         // check if EIP-7702 transaction is enabled.
-        if !SPEC::enabled(SpecId::PRAGUE) && self.tx.authorization_list.is_some() {
-            return Err(InvalidTransaction::AuthorizationListNotSupported);
+        #[cfg(not(feature = "morph"))]
+        {
+            if !SPEC::enabled(SpecId::PRAGUE) && self.tx.authorization_list.is_some() {
+                return Err(InvalidTransaction::AuthorizationListNotSupported);
+            }
+        }
+
+        #[cfg(feature = "morph")]
+        {
+            if !SPEC::enabled(SpecId::MORPH204) && self.tx.authorization_list.is_some() {
+                return Err(InvalidTransaction::AuthorizationListNotSupported);
+            }
         }
 
         if let Some(auth_list) = &self.tx.authorization_list {

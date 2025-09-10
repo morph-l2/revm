@@ -103,7 +103,13 @@ pub fn apply_eip7702_auth_list<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
 ) -> Result<u64, EVMError<DB::Error>> {
     // EIP-7702. Load bytecode to authorized accounts.
+    #[cfg(not(feature = "morph"))]
     if !SPEC::enabled(PRAGUE) {
+        return Ok(0);
+    }
+
+    #[cfg(feature = "morph")]
+    if !SPEC::enabled(MORPH204) {
         return Ok(0);
     }
 
