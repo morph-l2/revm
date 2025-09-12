@@ -8,7 +8,7 @@ use crate::{
         db::Database,
         eip7702, Account, Bytecode, EVMError, Env, Spec,
         SpecId::{CANCUN, PRAGUE, SHANGHAI, MORPH204},
-        TxKind, BLOCKHASH_STORAGE_ADDRESS, U256,
+        TxKind, BLOCKHASH_STORAGE_ADDRESS, U256, KECCAK_EMPTY,
     },
     Context, ContextPrecompiles,
 };
@@ -113,11 +113,14 @@ pub fn apply_eip7702_auth_list<SPEC: Spec, EXT, DB: Database>(
         return Ok(0);
     }
 
-    let tx = context.evm.inner.env.tx;
+    let tx = &context.evm.inner.env.tx;
     let chain_id = context.evm.inner.env.cfg.chain_id;
+    let Some(authorization_list) = context.evm.inner.env.tx.authorization_list.as_ref() else {
+        return Ok(0);
+    };
 
     let mut refunded_accounts = 0;
-    for authorization in tx.authorization_list.as_ref() {
+    for authorization in authorization_list.recovered_iter() {
         // 1. Verify the chain id is either 0 or the chain's current ID.
         let auth_chain_id = authorization.chain_id();
         if !auth_chain_id.is_zero() && auth_chain_id != U256::from(chain_id) {
@@ -157,7 +160,7 @@ pub fn apply_eip7702_auth_list<SPEC: Spec, EXT, DB: Database>(
         }
 
         // 7. Add `PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST` gas to the global refund counter if `authority` exists in the trie.
-        if !(authority_acc.is_empty() && authority_acc.is_loaded_as_not_existing_not_touched()) {
+        if !(authority_acc.is_empty()) {
             refunded_accounts += 1;
         }
 
@@ -168,7 +171,7 @@ pub fn apply_eip7702_auth_list<SPEC: Spec, EXT, DB: Database>(
         let (bytecode, hash) = if address.is_zero() {
             (Bytecode::default(), KECCAK_EMPTY)
         } else {
-            let bytecode = Bytecode::new_eip7702(address);
+            let bytecode = Bytecode::new_eip7702(*address);
             let hash = bytecode.hash_slow();
             (bytecode, hash)
         };
