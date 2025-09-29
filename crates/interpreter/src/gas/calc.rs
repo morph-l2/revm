@@ -416,7 +416,7 @@ pub fn validate_initial_tx_gas(
     }
 
     #[cfg(feature = "morph")]
-    if spec_id.is_enabled_in(SpecId::MORPH204) {
+    if spec_id.is_enabled_in(SpecId::VIRIDIAN) {
         initial_gas += authorization_list_num * eip7702::PER_EMPTY_ACCOUNT_COST;
     }
 

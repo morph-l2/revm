@@ -209,7 +209,7 @@ impl Env {
 
         #[cfg(feature = "morph")]
         {
-            if !SPEC::enabled(SpecId::MORPH204) && self.tx.authorization_list.is_some() {
+            if !SPEC::enabled(SpecId::VIRIDIAN) && self.tx.authorization_list.is_some() {
                 return Err(InvalidTransaction::AuthorizationListNotSupported);
             }
         }

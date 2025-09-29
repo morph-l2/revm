@@ -111,7 +111,7 @@ pub enum SpecId {
     /// `EIP-4844` is not included. So we sort it before Cancun.
     CURIE = 19,
     MORPH203 = 20, // revert Precompiles: RIPEMD-160, point evaluation, modexp, ecPairing
-    MORPH204 = 21, // Support EIP-7702
+    VIRIDIAN = 21, // Support EIP-7702
     CANCUN = 22,
     PRAGUE = 23,
     PRAGUE_EOF = 24,
@@ -179,7 +179,7 @@ impl From<&str> for SpecId {
             #[cfg(feature = "morph")]
             "Morph203" => SpecId::MORPH203,
             #[cfg(feature = "morph")]
-            "Morph204" => SpecId::MORPH204,
+            "Viridian" => SpecId::VIRIDIAN,
             _ => Self::LATEST,
         }
     }
@@ -229,7 +229,7 @@ impl From<SpecId> for &'static str {
             #[cfg(feature = "morph")]
             SpecId::MORPH203 => "Morph203",
             #[cfg(feature = "morph")]
-            SpecId::MORPH204 => "Morph204",
+            SpecId::VIRIDIAN => "Viridian",
             SpecId::LATEST => "Latest",
         }
     }
@@ -304,7 +304,7 @@ spec!(MORPH203, Morph203Spec);
 #[cfg(feature = "morph")]
 spec!(CURIE, CurieSpec);
 #[cfg(feature = "morph")]
-spec!(MORPH204, Morph204Spec);
+spec!(VIRIDIAN, ViridianSpec);
 
 #[cfg(not(any(feature = "optimism", feature = "morph")))]
 #[macro_export]
@@ -552,8 +552,8 @@ macro_rules! spec_to_generic {
                 use $crate::Morph203Spec as SPEC;
                 $e
             }
-            $crate::SpecId::MORPH204 => {
-                use $crate::Morph204Spec as SPEC;
+            $crate::SpecId::VIRIDIAN => {
+                use $crate::ViridianSpec as SPEC;
                 $e
             }
             $crate::SpecId::CURIE => {
@@ -604,7 +604,7 @@ mod tests {
         #[cfg(feature = "morph")]
         spec_to_generic!(CURIE, assert_eq!(SPEC::SPEC_ID, CURIE));
         #[cfg(feature = "morph")]
-        spec_to_generic!(MORPH204, assert_eq!(SPEC::SPEC_ID, MORPH204));
+        spec_to_generic!(VIRIDIAN, assert_eq!(SPEC::SPEC_ID, VIRIDIAN));
         spec_to_generic!(CANCUN, assert_eq!(SPEC::SPEC_ID, CANCUN));
         #[cfg(feature = "optimism")]
         spec_to_generic!(ECOTONE, assert_eq!(SPEC::SPEC_ID, ECOTONE));

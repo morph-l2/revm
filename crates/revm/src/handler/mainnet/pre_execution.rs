@@ -7,11 +7,14 @@ use crate::{
     primitives::{
         db::Database,
         eip7702, Account, Bytecode, EVMError, Env, Spec,
-        SpecId::{CANCUN, PRAGUE, SHANGHAI, MORPH204},
+        SpecId::{CANCUN, PRAGUE, SHANGHAI},
         TxKind, BLOCKHASH_STORAGE_ADDRESS, U256, KECCAK_EMPTY,
     },
     Context, ContextPrecompiles,
 };
+
+#[cfg(feature = "morph")]
+use crate::primitives::SpecId::VIRIDIAN;
 
 /// Main precompile load
 #[inline]
@@ -109,11 +112,11 @@ pub fn apply_eip7702_auth_list<SPEC: Spec, EXT, DB: Database>(
     }
 
     #[cfg(feature = "morph")]
-    if !SPEC::enabled(MORPH204) {
+    if !SPEC::enabled(VIRIDIAN) {
         return Ok(0);
     }
 
-    let tx = &context.evm.inner.env.tx;
+    // if there is no authorization list, return early.
     let chain_id = context.evm.inner.env.cfg.chain_id;
     let Some(authorization_list) = context.evm.inner.env.tx.authorization_list.as_ref() else {
         return Ok(0);

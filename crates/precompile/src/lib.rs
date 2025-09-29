@@ -67,7 +67,7 @@ impl Precompiles {
             #[cfg(feature = "morph")]
             PrecompileSpecId::MORPH203 => Self::morph203(),
             #[cfg(feature = "morph")]
-            PrecompileSpecId::MORPH204 => Self::morph204(),
+            PrecompileSpecId::VIRIDIAN => Self::viridian(),
             PrecompileSpecId::CANCUN => Self::cancun(),
             PrecompileSpecId::PRAGUE => Self::prague(),
             PrecompileSpecId::LATEST => Self::latest(),
@@ -239,7 +239,7 @@ impl Precompiles {
 
     /// Returns precompiles for Morph
     #[cfg(feature = "morph")]
-    pub fn morph204() -> &'static Self {
+    pub fn viridian() -> &'static Self {
         static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
         INSTANCE.get_or_init(|| {
             let precompiles = Self::morph203().clone();
@@ -351,10 +351,9 @@ pub enum PrecompileSpecId {
     #[cfg(feature = "morph")]
     MORPH203,
     #[cfg(feature = "morph")]
+    VIRIDIAN,
     CANCUN,
     PRAGUE,
-    #[cfg(feature = "morph")]
-    MORPH204,
     LATEST,
 }
 
@@ -383,7 +382,7 @@ impl PrecompileSpecId {
             #[cfg(feature = "morph")]
             MORPH203 => Self::MORPH203,
             #[cfg(feature = "morph")]
-            MORPH204 => Self::MORPH204,
+            VIRIDIAN => Self::VIRIDIAN,
         }
     }
 }
