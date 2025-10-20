@@ -66,6 +66,8 @@ impl Precompiles {
             PrecompileSpecId::BERNOULLI => Self::bernoulli(),
             #[cfg(feature = "morph")]
             PrecompileSpecId::MORPH203 => Self::morph203(),
+            #[cfg(feature = "morph")]
+            PrecompileSpecId::VIRIDIAN => Self::viridian(),
             PrecompileSpecId::CANCUN => Self::cancun(),
             PrecompileSpecId::PRAGUE => Self::prague(),
             PrecompileSpecId::LATEST => Self::latest(),
@@ -235,6 +237,16 @@ impl Precompiles {
         })
     }
 
+    /// Returns precompiles for Morph
+    #[cfg(feature = "morph")]
+    pub fn viridian() -> &'static Self {
+        static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+        INSTANCE.get_or_init(|| {
+            let precompiles = Self::morph203().clone();
+            Box::new(precompiles)
+        })
+    }
+
     /// Returns the precompiles for the latest spec.
     pub fn latest() -> &'static Self {
         Self::prague()
@@ -338,6 +350,8 @@ pub enum PrecompileSpecId {
     BERNOULLI,
     #[cfg(feature = "morph")]
     MORPH203,
+    #[cfg(feature = "morph")]
+    VIRIDIAN,
     CANCUN,
     PRAGUE,
     LATEST,
@@ -367,6 +381,8 @@ impl PrecompileSpecId {
             BERNOULLI | CURIE => Self::BERNOULLI,
             #[cfg(feature = "morph")]
             MORPH203 => Self::MORPH203,
+            #[cfg(feature = "morph")]
+            VIRIDIAN => Self::VIRIDIAN,
         }
     }
 }

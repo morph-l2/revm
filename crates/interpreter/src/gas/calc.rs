@@ -409,8 +409,14 @@ pub fn validate_initial_tx_gas(
         initial_gas += initcode_cost(input.len() as u64)
     }
 
-    //   EIP-7702
+    // EIP-7702
+    #[cfg(not(feature = "morph"))]
     if spec_id.is_enabled_in(SpecId::PRAGUE) {
+        initial_gas += authorization_list_num * eip7702::PER_EMPTY_ACCOUNT_COST;
+    }
+
+    #[cfg(feature = "morph")]
+    if spec_id.is_enabled_in(SpecId::VIRIDIAN) {
         initial_gas += authorization_list_num * eip7702::PER_EMPTY_ACCOUNT_COST;
     }
 

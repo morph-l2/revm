@@ -36,14 +36,13 @@ impl AuthorizationList {
     }
 
     /// Returns true if the authorization list is valid.
-    pub fn is_valid(&self, _chain_id: u64) -> Result<(), InvalidAuthorization> {
+    pub fn is_valid(&self, chain_id: u64) -> Result<(), InvalidAuthorization> {
         let validate = |auth: &SignedAuthorization| -> Result<(), InvalidAuthorization> {
-            // TODO Eip7702. Check chain_id
-            // Pending: https://github.com/ethereum/EIPs/pull/8833/files
-            // let auth_chain_id: u64 = auth.chain_id().try_into().unwrap_or(u64::MAX);
-            // if auth_chain_id != 0 && auth_chain_id != chain_id {
-            //     return Err(InvalidAuthorization::InvalidChainId);
-            // }
+            // Check chain_id: must be 0 or equal to tx chain_id.
+            let auth_chain_id: u64 = auth.chain_id().try_into().unwrap_or(u64::MAX);
+            if auth_chain_id != 0 && auth_chain_id != chain_id {
+                return Err(InvalidAuthorization::InvalidChainId);
+            }
 
             // Check y_parity, Parity::Parity means that it was 0 or 1.
             if !matches!(auth.signature().v(), Parity::Parity(_)) {
