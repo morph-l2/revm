@@ -2,6 +2,9 @@
 
 use crate::handler::mainnet;
 use crate::handler::mainnet::deduct_caller_inner;
+use crate::morph::erc20_fee::{transfer_erc20, L2_FEE_VAULT};
+use crate::morph::Erc20FeeInfo;
+use crate::primitives::{Account, Env, TxKind};
 use crate::{
     handler::register::EvmHandler,
     interpreter::Gas,
@@ -35,6 +38,15 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
             .map_err(EVMError::Database)?;
     context.evm.inner.l1_block_info = Some(l1_block_info);
 
+    let fee_token_id = context.evm.env.tx.fee_token_id.unwrap_or_default();
+    if fee_token_id != 0 {
+        let caller = context.evm.env.tx.caller;
+        let erc20_fee_info =
+            crate::morph::Erc20FeeInfo::try_fetch(&mut context.evm.inner.db, fee_token_id, caller)
+                .map_err(EVMError::Database)?;
+        context.evm.inner.erc20_fee_info = erc20_fee_info;
+    }
+
     mainnet::load_accounts::<SPEC, EXT, DB>(context)
 }
 
@@ -54,6 +66,15 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
         // We deduct caller max balance after minting and before deducing the
         // l1 cost, max values is already checked in pre_validate but l1 cost wasn't.
         deduct_caller_inner::<SPEC>(caller_account.data, &context.evm.inner.env);
+
+        if let Some(ref erc20_fee_info) = context.evm.inner.erc20_fee_info {
+            deduct_caller_use_erc20(
+                &mut context.evm.inner.db,
+                erc20_fee_info,
+                caller_account.data,
+                &context.evm.inner.env,
+            );
+        }
 
         let Some(rlp_bytes) = &context.evm.inner.env.tx.morph.rlp_bytes else {
             return Err(EVMError::Custom(
@@ -89,6 +110,42 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
         caller_account.data.mark_touch();
     }
     Ok(())
+}
+
+/// Helper function that deducts the caller balance.
+#[inline]
+fn deduct_caller_use_erc20<DB: Database>(
+    db: &mut DB,
+    erc20_fee_info: &Erc20FeeInfo,
+    caller_account: &mut Account,
+    env: &Env,
+) {
+    // Subtract gas costs from the caller's account.
+    // We need to saturate the gas cost to prevent underflow in case that `disable_balance_check` is enabled.
+    let mut gas_cost = U256::from(env.tx.gas_limit).saturating_mul(env.effective_gas_price());
+
+    //calculate fee for erc20.
+    
+    transfer_erc20(
+        db,
+        erc20_fee_info.token_address,
+        erc20_fee_info.caller,
+        L2_FEE_VAULT,
+        U256::default(),
+        U256::default(),
+    );
+
+    // set new caller account balance.
+    caller_account.info.balance = caller_account.info.balance.saturating_sub(gas_cost);
+
+    // bump the nonce for calls. Nonce for CREATE will be bumped in `handle_create`.
+    if matches!(env.tx.transact_to, TxKind::Call(_)) {
+        // Nonce is already checked
+        caller_account.info.nonce = caller_account.info.nonce.saturating_add(1);
+    }
+
+    // touch account so we know it is changed.
+    caller_account.mark_touch();
 }
 
 /// Reward beneficiary with gas fee.

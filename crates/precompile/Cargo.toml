@@ -71,6 +71,12 @@ rstest = "0.22.0"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
+secp256k1 = { version = ">=0.28, <=0.29", default-features = false, features = [
+    "alloc",
+    "recovery",
+    "rand",
+    "global-context",
+] }
 
 [features]
 default = ["std", "kzg-rs", "portable"]

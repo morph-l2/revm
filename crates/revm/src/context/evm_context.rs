@@ -530,6 +530,8 @@ pub(crate) mod test_utils {
                 error: Ok(()),
                 #[cfg(any(feature = "optimism", feature = "morph"))]
                 l1_block_info: None,
+                #[cfg(feature = "morph")]
+                erc20_fee_info: None,
             },
             precompiles: ContextPrecompiles::default(),
         }
@@ -545,6 +547,8 @@ pub(crate) mod test_utils {
                 error: Ok(()),
                 #[cfg(any(feature = "optimism", feature = "morph"))]
                 l1_block_info: None,
+                #[cfg(feature = "morph")]
+                erc20_fee_info: None,
             },
             precompiles: ContextPrecompiles::default(),
         }

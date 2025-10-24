@@ -1,0 +1,121 @@
+use crate::primitives::{Bytes, TxEnv, TxKind};
+use core::ops::Add;
+
+use crate::morph::L1_GAS_PRICE_ORACLE_ADDRESS;
+use crate::primitives::{address, Address, SpecId, U256};
+use crate::{Database, Evm};
+
+// TokenAddressMappingSlot is the storage slot for mapping(uint16 => address)
+const TOKEN_ADDRESS_MAPPING_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
+// TokenPriceMappingSlot is the storage slot for mapping(uint16 => uint256)
+const TOKEN_PRICE_MAPPING_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
+// TokenBalanceSlotMappingSlot is the storage slot for mapping(uint16 => bytes32)
+const TOKEN_BALANCE_SLOT_MAPPING_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
+// System address for receiving ERC20 fees
+pub const L2_FEE_VAULT: Address =
+    address!("0e87cd091e091562F25CB1cf4641065dA2C049F5");
+
+#[derive(Clone, Debug, Default)]
+pub struct Erc20FeeInfo {
+    /// The ERC20 token address
+    pub token_address: Address,
+    /// The price of the token
+    pub price: U256,
+    /// The caller address
+    pub caller: Address,
+    /// The token balance of caller
+    pub balance: U256,
+}
+
+impl Erc20FeeInfo {
+    // Get the token information for gas payment from the state db.
+    pub(super) fn try_fetch<DB: Database>(
+        db: &mut DB,
+        token_id: u16,
+        caller: Address,
+    ) -> Result<Option<Erc20FeeInfo>, DB::Error> {
+        // get token address of token_id
+        let storage_value = load_mapping_value(
+            db,
+            L1_GAS_PRICE_ORACLE_ADDRESS,
+            TOKEN_ADDRESS_MAPPING_SLOT,
+            token_id.to_be_bytes().to_vec(),
+        )?;
+        let token_address: Address = Address::from_word(storage_value.into());
+        if token_address.is_zero() {
+            return Ok(None);
+        }
+
+        // get token price of token_id
+        let token_price = load_mapping_value(
+            db,
+            L1_GAS_PRICE_ORACLE_ADDRESS,
+            TOKEN_PRICE_MAPPING_SLOT,
+            token_id.to_be_bytes().to_vec(),
+        )?;
+        if token_price.is_zero() {
+            return Ok(None);
+        }
+
+        // get token balance of token_id
+        let token_balance_slot = load_mapping_value(
+            db,
+            L1_GAS_PRICE_ORACLE_ADDRESS,
+            TOKEN_BALANCE_SLOT_MAPPING_SLOT,
+            token_id.to_be_bytes().to_vec(),
+        )?;
+
+        let caller_token_balance =
+            load_mapping_value(db, token_address, token_balance_slot, caller.to_vec())?;
+        let ecc20_fee = Erc20FeeInfo {
+            token_address,
+            price: token_price,
+            caller,
+            balance: caller_token_balance,
+        };
+
+        Ok(Some(ecc20_fee))
+    }
+}
+
+fn load_mapping_value<DB: Database>(
+    db: &mut DB,
+    account: Address,
+    slot_index: U256,
+    mut key: Vec<u8>,
+) -> Result<U256, <DB as Database>::Error> {
+    let mut pre_image = slot_index.to_be_bytes_vec();
+    pre_image.append(&mut key);
+    let storage_key = crate::primitives::keccak256(pre_image);
+    let storage_value = db.storage(account, U256::from_be_bytes(storage_key.0))?;
+    Ok(storage_value)
+}
+
+pub(super) fn transfer_erc20<DB: Database>(
+    db: &mut DB,
+    token: Address,
+    from: Address,
+    to: Address,
+    amoumt: U256,
+    balance_slot: U256,
+) {
+
+    // Prepare calldata of erc20 transfer
+    let method_id = [0xa9u8, 0x05, 0x9c, 0xbb]; // transfer(address,uint256)
+
+    if balance_slot.is_zero() {
+        let mut evm = Evm::builder().with_db(db).build();
+        let tx = TxEnv {
+            caller: Address::default(),
+            gas_limit: u64::MAX,
+            transact_to: token.into(),
+            value: U256::from(1_000u64),
+            data: Bytes::new(),
+            nonce: None,
+            chain_id: None,
+            ..Default::default()
+        };
+        evm.context.evm.env.tx = tx;
+        let _ = evm.transact();
+    }
+}

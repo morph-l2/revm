@@ -635,6 +635,10 @@ pub struct TxEnv {
     #[cfg(feature = "morph")]
     /// Morph fields
     pub morph: MorphFields,
+
+    #[cfg(feature = "morph")]
+    /// For ERC20FeeType
+    pub fee_token_id: Option<u16>,
 }
 
 pub enum TxType {
@@ -680,6 +684,7 @@ impl Default for TxEnv {
             optimism: OptimismFields::default(),
             #[cfg(feature = "morph")]
             morph: MorphFields::default(),
+            fee_token_id: None,
         }
     }
 }
