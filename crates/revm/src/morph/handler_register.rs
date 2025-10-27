@@ -63,19 +63,6 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
         .load_account(context.evm.inner.env.tx.caller, &mut context.evm.inner.db)?;
 
     if !context.evm.inner.env.tx.morph.is_l1_msg {
-        // We deduct caller max balance after minting and before deducing the
-        // l1 cost, max values is already checked in pre_validate but l1 cost wasn't.
-        deduct_caller_inner::<SPEC>(caller_account.data, &context.evm.inner.env);
-
-        if let Some(ref erc20_fee_info) = context.evm.inner.erc20_fee_info {
-            deduct_caller_use_erc20(
-                &mut context.evm.inner.db,
-                erc20_fee_info,
-                caller_account.data,
-                &context.evm.inner.env,
-            );
-        }
-
         let Some(rlp_bytes) = &context.evm.inner.env.tx.morph.rlp_bytes else {
             return Err(EVMError::Custom(
                 "[MORPH] Failed to load transaction rlp_bytes.".to_string(),
@@ -89,16 +76,30 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
             .as_ref()
             .expect("L1BlockInfo should be loaded")
             .calculate_tx_l1_cost(rlp_bytes, SPEC::SPEC_ID);
-        if tx_l1_cost.gt(&caller_account.info.balance) {
-            return Err(EVMError::Transaction(
-                InvalidTransaction::LackOfFundForMaxFee {
-                    fee: tx_l1_cost.into(),
-                    balance: caller_account.info.balance.into(),
-                },
-            ));
+        
+        if let Some(ref erc20_fee_info) = context.evm.inner.erc20_fee_info {
+            deduct_caller_use_erc20(
+                &mut context.evm.inner.db,
+                erc20_fee_info,
+                caller_account.data,
+                &context.evm.inner.env,
+            );
+        } else {
+            // We deduct caller max balance after minting and before deducing the
+            // l1 cost, max values is already checked in pre_validate but l1 cost wasn't.
+            deduct_caller_inner::<SPEC>(caller_account.data, &context.evm.inner.env);
+
+            if tx_l1_cost.gt(&caller_account.info.balance) {
+                return Err(EVMError::Transaction(
+                    InvalidTransaction::LackOfFundForMaxFee {
+                        fee: tx_l1_cost.into(),
+                        balance: caller_account.info.balance.into(),
+                    },
+                ));
+            }
+            caller_account.data.info.balance =
+                caller_account.data.info.balance.saturating_sub(tx_l1_cost);
         }
-        caller_account.data.info.balance =
-            caller_account.data.info.balance.saturating_sub(tx_l1_cost);
     } else {
         // bump the nonce for calls. Nonce for CREATE will be bumped in `handle_create`.
         if matches!(context.evm.inner.env.tx.transact_to, TransactTo::Call(_)) {
@@ -122,21 +123,14 @@ fn deduct_caller_use_erc20<DB: Database>(
 ) {
     // Subtract gas costs from the caller's account.
     // We need to saturate the gas cost to prevent underflow in case that `disable_balance_check` is enabled.
-    let mut gas_cost = U256::from(env.tx.gas_limit).saturating_mul(env.effective_gas_price());
-
-    //calculate fee for erc20.
-    
+    let gas_cost = U256::from(env.tx.gas_limit).saturating_mul(env.effective_gas_price());
     transfer_erc20(
         db,
         erc20_fee_info.token_address,
         erc20_fee_info.caller,
         L2_FEE_VAULT,
-        U256::default(),
-        U256::default(),
+        gas_cost,
     );
-
-    // set new caller account balance.
-    caller_account.info.balance = caller_account.info.balance.saturating_sub(gas_cost);
 
     // bump the nonce for calls. Nonce for CREATE will be bumped in `handle_create`.
     if matches!(env.tx.transact_to, TxKind::Call(_)) {
