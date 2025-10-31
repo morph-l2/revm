@@ -241,6 +241,7 @@ impl Env {
     pub fn validate_tx_against_state<SPEC: Spec>(
         &self,
         account: &mut Account,
+        erc20_balance: U256,
     ) -> Result<(), InvalidTransaction> {
         // EIP-3607: Reject transactions from senders with deployed code
         // This EIP is introduced after london but there was no collision in past
@@ -283,7 +284,12 @@ impl Env {
 
         // Check if account has enough balance for gas_limit*gas_price and value transfer.
         // Transfer will be done inside `*_inner` functions.
-        if balance_check > account.info.balance {
+        let lack_of_fund_for_max_fee = if self.tx.fee_token_id.unwrap_or_default() != 0 {
+            balance_check > erc20_balance
+        } else {
+            balance_check > account.info.balance
+        };
+        if lack_of_fund_for_max_fee {
             cfg_if::cfg_if! {
                 if #[cfg(not(feature = "morph"))] {
                     if self.cfg.is_balance_check_disabled() {

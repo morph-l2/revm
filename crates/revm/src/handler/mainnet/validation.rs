@@ -1,3 +1,4 @@
+use crate::primitives::U256;
 use revm_interpreter::gas;
 
 use crate::{
@@ -25,11 +26,15 @@ pub fn validate_tx_against_state<SPEC: Spec, EXT, DB: Database>(
         .journaled_state
         .load_code(tx_caller, &mut context.evm.inner.db)?;
 
+    let erc20_balance = match &context.evm.inner.erc20_fee_info {
+        Some(fee_info) => fee_info.balance,
+        None => U256::ZERO,
+    };
     context
         .evm
         .inner
         .env
-        .validate_tx_against_state::<SPEC>(caller_account.data)
+        .validate_tx_against_state::<SPEC>(caller_account.data, erc20_balance)
         .map_err(EVMError::Transaction)?;
 
     Ok(())

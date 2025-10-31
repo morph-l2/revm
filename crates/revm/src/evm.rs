@@ -5,9 +5,11 @@ use crate::{
     interpreter::{
         CallInputs, CreateInputs, EOFCreateInputs, Host, InterpreterAction, SharedMemory,
     },
+    morph::erc20_fee::L2_FEE_VAULT,
     primitives::{
-        specification::SpecId, BlockEnv, CfgEnv, EVMError, EVMResult, EnvWithHandlerCfg,
-        ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind, EOF_MAGIC_BYTES,
+        specification::SpecId, Address, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult,
+        EnvWithHandlerCfg, ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind,
+        EOF_MAGIC_BYTES, U256,
     },
     Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult,
 };
@@ -323,20 +325,38 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
     /// Transact pre-verified transaction.
     fn transact_preverified_inner(&mut self, initial_gas_spend: u64) -> EVMResult<DB::Error> {
         let spec_id = self.spec_id();
-        let ctx = &mut self.context;
-        let pre_exec = self.handler.pre_execution();
 
-        // load access list and beneficiary if needed.
-        pre_exec.load_accounts(ctx)?;
+        {
+            let ctx = &mut self.context;
+            let pre_exec = self.handler.pre_execution();
+            // load access list and beneficiary if needed.
+            pre_exec.load_accounts(ctx)?;
 
-        // load precompiles
-        let precompiles = pre_exec.load_precompiles();
-        ctx.evm.set_precompiles(precompiles);
+            // load precompiles
+            let precompiles = pre_exec.load_precompiles();
+            ctx.evm.set_precompiles(precompiles);
+        }
 
         // deduce caller balance with its limit.
-        pre_exec.deduct_caller(ctx)?;
+        {
+            let ctx = &mut self.context;
+            let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
+            if let Some(token_fee) = erc20_fee_info {
+                self.deduct_caller_with_erc20(
+                    token_fee.token_address,
+                    token_fee.caller,
+                    L2_FEE_VAULT,
+                )?;
+            } else {
+                self.handler.pre_execution().deduct_caller(ctx)?;
+            }
+        }
+
+        let ctx = &mut self.context;
 
         let gas_limit = ctx.evm.env.tx.gas_limit - initial_gas_spend;
+
+        let pre_exec = self.handler.pre_execution();
 
         // apply EIP-7702 auth list.
         let eip7702_gas_refund = pre_exec.apply_eip7702_auth_list(ctx)? as i64;
@@ -388,6 +408,62 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
         post_exec.output(ctx, result)
+    }
+
+    #[inline]
+    pub fn deduct_caller_with_erc20(
+        &mut self,
+        token: Address,
+        from: Address,
+        to: Address,
+    ) -> Result<(), EVMError<DB::Error>> {
+        let ctx = &self.context;
+        let Some(rlp_bytes) = &ctx.evm.inner.env.tx.morph.rlp_bytes else {
+            return Err(EVMError::Custom(
+                "[MORPH] Failed to load transaction rlp_bytes.".to_string(),
+            ));
+        };
+
+        let tx_l1_cost = self
+            .context
+            .evm
+            .inner
+            .l1_block_info
+            .as_ref()
+            .expect("L1BlockInfo should be loaded")
+            .calculate_tx_l1_cost(rlp_bytes, self.spec_id());
+        let gas_cost =
+            U256::from(ctx.evm.env.tx.gas_limit).saturating_mul(ctx.evm.env.effective_gas_price());
+        let amount = tx_l1_cost + gas_cost;
+
+        // Call transfer(address,uint256) method via EVM
+        // Method signature: transfer(address,uint256) -> 0xa9059cbb
+        let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
+
+        // Encode calldata: method_id + padded to address + amount
+        let mut calldata = Vec::with_capacity(68);
+        calldata.extend_from_slice(&method_id);
+        calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
+        calldata.extend_from_slice(to.as_slice());
+        calldata.extend_from_slice(&amount.to_be_bytes::<32>());
+        let tx = TxEnv {
+            caller: from,
+            gas_limit: u64::MAX,
+            gas_price: U256::ZERO,
+            transact_to: TxKind::Call(token),
+            value: U256::ZERO,
+            data: Bytes::from(calldata),
+            nonce: None,
+            chain_id: None,
+            ..Default::default()
+        };
+        let origin_tx = self.context.evm.inner.env.tx.clone();
+        self.context.evm.inner.env.tx = tx;
+
+        let _ = self.transact_preverified_inner(0);
+        self.context.evm.inner.env.tx = origin_tx;
+
+        Ok(())
     }
 }
 

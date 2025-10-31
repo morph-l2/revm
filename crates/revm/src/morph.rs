@@ -1,4 +1,4 @@
-mod erc20_fee;
+pub mod erc20_fee;
 mod handler_register;
 mod l1block;
 
