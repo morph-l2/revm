@@ -1,3 +1,5 @@
+use revm_interpreter::Gas;
+
 use crate::{
     builder::{EvmBuilder, HandlerStage, SetGenericStage},
     db::{Database, DatabaseCommit, EmptyDB},
@@ -5,11 +7,13 @@ use crate::{
     interpreter::{
         CallInputs, CreateInputs, EOFCreateInputs, Host, InterpreterAction, SharedMemory,
     },
-    morph::erc20_fee::L2_FEE_VAULT,
+    morph::{
+        erc20_fee::{eth_to_erc20, L2_FEE_VAULT},
+        Erc20FeeInfo,
+    },
     primitives::{
-        specification::SpecId, Address, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult,
-        EnvWithHandlerCfg, ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind,
-        EOF_MAGIC_BYTES, U256,
+        specification::SpecId, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult, EnvWithHandlerCfg,
+        ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind, EOF_MAGIC_BYTES, U256,
     },
     Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult,
 };
@@ -342,11 +346,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             let ctx = &mut self.context;
             let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
             if let Some(token_fee) = erc20_fee_info {
-                self.deduct_caller_with_erc20(
-                    token_fee.token_address,
-                    token_fee.caller,
-                    L2_FEE_VAULT,
-                )?;
+                self.deduct_caller_with_erc20(token_fee)?;
             } else {
                 self.handler.pre_execution().deduct_caller(ctx)?;
             }
@@ -403,9 +403,23 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // calculate final refund and add EIP-7702 refund to gas.
         post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
         // Reimburse the caller
-        post_exec.reimburse_caller(ctx, result.gas())?;
+        {
+            let ctx = &mut self.context;
+            let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
+            if let Some(token_fee) = erc20_fee_info {
+                self.reimburse_caller_with_erc20(token_fee, result.gas())?;
+            } else {
+                post_exec.reimburse_caller(ctx, result.gas())?;
+            }
+        }
+
+        let ctx = &mut self.context;
+        let post_exec = self.handler.post_execution();
         // Reward beneficiary
-        post_exec.reward_beneficiary(ctx, result.gas())?;
+        let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
+        if erc20_fee_info.is_none() {
+            post_exec.reward_beneficiary(ctx, result.gas())?;
+        }
         // Returns output of transaction.
         post_exec.output(ctx, result)
     }
@@ -413,9 +427,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
     #[inline]
     pub fn deduct_caller_with_erc20(
         &mut self,
-        token: Address,
-        from: Address,
-        to: Address,
+        erc20_info: Erc20FeeInfo,
     ) -> Result<(), EVMError<DB::Error>> {
         let ctx = &self.context;
         let Some(rlp_bytes) = &ctx.evm.inner.env.tx.morph.rlp_bytes else {
@@ -435,7 +447,18 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let gas_cost =
             U256::from(ctx.evm.env.tx.gas_limit).saturating_mul(ctx.evm.env.effective_gas_price());
         let amount = tx_l1_cost + gas_cost;
+        let erc20_amount = eth_to_erc20(amount, erc20_info.price_ratio, erc20_info.scale);
+        if erc20_amount.is_zero() {
+            return Err(EVMError::Custom(
+                "[MORPH] Failed to calculate erc20 gas.".to_string(),
+            ));
+        }
 
+        if erc20_amount > erc20_info.balance {
+            return Err(EVMError::Custom(
+                "[MORPH] Erc20 balance is insufficient to pay gas.".to_string(),
+            ));
+        }
         // Call transfer(address,uint256) method via EVM
         // Method signature: transfer(address,uint256) -> 0xa9059cbb
         let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
@@ -444,13 +467,88 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let mut calldata = Vec::with_capacity(68);
         calldata.extend_from_slice(&method_id);
         calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
-        calldata.extend_from_slice(to.as_slice());
-        calldata.extend_from_slice(&amount.to_be_bytes::<32>());
+        calldata.extend_from_slice(L2_FEE_VAULT.as_slice());
+        calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
         let tx = TxEnv {
-            caller: from,
-            gas_limit: u64::MAX,
+            caller: erc20_info.caller,
+            gas_limit: 1_000_00u64,
             gas_price: U256::ZERO,
-            transact_to: TxKind::Call(token),
+            transact_to: TxKind::Call(erc20_info.token_address),
+            value: U256::ZERO,
+            data: Bytes::from(calldata),
+            nonce: None,
+            chain_id: None,
+            ..Default::default()
+        };
+
+        // let ctx = &mut self.context;
+        // let exec = self.handler.execution();
+        // let call = exec.call(
+        //     ctx,
+        //     CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap(),
+        // )?;
+        // let mut _result = match call {
+        //     FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
+        //     FrameOrResult::Result(result) => result,
+        // };
+
+        let origin_tx = self.context.evm.inner.env.tx.clone();
+        self.context.evm.inner.env.tx = tx;
+
+        let _ = self.transact_preverified_inner(0);
+        // load caller's account.
+        let ctx = &mut self.context;
+        let caller_account = ctx
+            .evm
+            .inner
+            .journaled_state
+            .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?
+            .data;
+        caller_account.info.nonce = caller_account.info.nonce.saturating_sub(1);
+        ctx.evm.inner.env.tx = origin_tx;
+
+        // bump the nonce for calls. Nonce for CREATE will be bumped in `handle_create`.
+        if matches!(ctx.evm.inner.env.tx.transact_to, TxKind::Call(_)) {
+            // Nonce is already checked
+            caller_account.info.nonce = caller_account.info.nonce.saturating_add(1);
+        }
+        // touch account so we know it is changed.
+        caller_account.mark_touch();
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn reimburse_caller_with_erc20(
+        &mut self,
+        erc20_info: Erc20FeeInfo,
+        gas: &Gas,
+    ) -> Result<(), EVMError<DB::Error>> {
+        let ctx = &self.context;
+
+        let effective_gas_price = ctx.evm.env.effective_gas_price();
+        let amount = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
+        let erc20_amount = eth_to_erc20(amount, erc20_info.price_ratio, erc20_info.scale);
+        if erc20_amount.is_zero() {
+            return Err(EVMError::Custom(
+                "[MORPH] Failed to calculate erc20 gas.".to_string(),
+            ));
+        }
+        // Call transfer(address,uint256) method via EVM
+        // Method signature: transfer(address,uint256) -> 0xa9059cbb
+        let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
+
+        // Encode calldata: method_id + padded to address + amount
+        let mut calldata = Vec::with_capacity(68);
+        calldata.extend_from_slice(&method_id);
+        calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
+        calldata.extend_from_slice(erc20_info.caller.as_slice());
+        calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
+        let tx = TxEnv {
+            caller: L2_FEE_VAULT,
+            gas_limit: 1_000_00u64,
+            gas_price: U256::ZERO,
+            transact_to: TxKind::Call(erc20_info.token_address),
             value: U256::ZERO,
             data: Bytes::from(calldata),
             nonce: None,
@@ -461,6 +559,15 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         self.context.evm.inner.env.tx = tx;
 
         let _ = self.transact_preverified_inner(0);
+        // load caller's account.
+        let ctx = &mut self.context;
+        let fee_vault_account = ctx
+            .evm
+            .inner
+            .journaled_state
+            .load_account(L2_FEE_VAULT, &mut ctx.evm.inner.db)?
+            .data;
+        fee_vault_account.info.nonce = fee_vault_account.info.nonce.saturating_sub(1);
         self.context.evm.inner.env.tx = origin_tx;
 
         Ok(())

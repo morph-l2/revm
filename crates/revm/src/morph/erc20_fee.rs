@@ -3,12 +3,10 @@ use crate::primitives::{address, Address, U256};
 use crate::primitives::{Bytes, TxEnv, TxKind};
 use crate::{Database, Evm};
 
-// TokenAddressMappingSlot is the storage slot for mapping(uint16 => address)
-const TOKEN_ADDRESS_MAPPING_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
-// TokenPriceMappingSlot is the storage slot for mapping(uint16 => uint256)
-const TOKEN_PRICE_MAPPING_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
-// TokenBalanceSlotMappingSlot is the storage slot for mapping(uint16 => bytes32)
-const TOKEN_BALANCE_SLOT_MAPPING_SLOT: U256 = U256::from_limbs([1u64, 0, 0, 0]);
+// TokenRegistry is the storage slot for mapping(uint16 => TokenInfo) - slot 0
+const TOKEN_REGISTRY_SLOT: U256 = U256::from_limbs([0u64, 0, 0, 0]);
+// PriceRatio is the storage slot for mapping(uint16 => uint256) - slot 2
+const PRICE_RATIO_SLOT: U256 = U256::from_limbs([2u64, 0, 0, 0]);
 // System address for receiving ERC20 fees
 pub const L2_FEE_VAULT: Address = address!("0e87cd091e091562F25CB1cf4641065dA2C049F5");
 
@@ -16,8 +14,14 @@ pub const L2_FEE_VAULT: Address = address!("0e87cd091e091562F25CB1cf4641065dA2C0
 pub struct Erc20FeeInfo {
     /// The ERC20 token address
     pub token_address: Address,
-    /// The price of the token
-    pub price: U256,
+    /// Whether the token is active
+    pub is_active: bool,
+    /// Token decimals
+    pub decimals: u8,
+    /// The price ratio of the token
+    pub price_ratio: U256,
+    /// The scale of the token
+    pub scale: U256,
     /// The caller address
     pub caller: Address,
     /// The token balance of caller
@@ -33,62 +37,85 @@ impl Erc20FeeInfo {
         token_id: u16,
         caller: Address,
     ) -> Result<Option<Erc20FeeInfo>, DB::Error> {
-        // get token address of token_id
-        let storage_value = load_mapping_value(
-            db,
-            L1_GAS_PRICE_ORACLE_ADDRESS,
-            TOKEN_ADDRESS_MAPPING_SLOT,
-            token_id.to_be_bytes().to_vec(),
-        )?;
-        let token_address: Address = Address::from_word(storage_value.into());
-        if token_address.is_zero() {
-            return Ok(None);
-        }
+        // Get the base slot for this token_id in tokenRegistry mapping
+        let token_registry_base =
+            get_mapping_slot(TOKEN_REGISTRY_SLOT, token_id.to_be_bytes().to_vec());
 
-        // get token price of token_id
-        let token_price = load_mapping_value(
-            db,
-            L1_GAS_PRICE_ORACLE_ADDRESS,
-            TOKEN_PRICE_MAPPING_SLOT,
-            token_id.to_be_bytes().to_vec(),
-        )?;
-        if token_price.is_zero() {
-            return Ok(None);
-        }
+        // TokenInfo struct layout in storage (following Solidity storage packing rules):
+        // slot + 0: tokenAddress (address, 20 bytes) + 12 bytes padding
+        // slot + 1: balanceSlot (bytes32, 32 bytes)
+        // slot + 2: isActive (bool, 1 byte) + decimals (uint8, 1 byte) + 30 bytes padding
+        // slot + 3: scale (uint256, 32 bytes)
 
-        // get token balance of token_id
-        let token_balance_slot = load_mapping_value(
-            db,
+        // Read tokenAddress from slot + 0
+        let slot_0 = db.storage(L1_GAS_PRICE_ORACLE_ADDRESS, token_registry_base)?;
+        let token_address = Address::from_word(slot_0.into());
+
+        // Read balanceSlot from slot + 1
+        let token_balance_slot = db.storage(
             L1_GAS_PRICE_ORACLE_ADDRESS,
-            TOKEN_BALANCE_SLOT_MAPPING_SLOT,
-            token_id.to_be_bytes().to_vec(),
+            token_registry_base + U256::from(1),
         )?;
 
-        // get caller's token balance
+        // Read isActive and decimals from slot + 2
+        // In big-endian representation, rightmost byte is the lowest position
+        // isActive is at the rightmost (byte 31), decimals is to its left (byte 30)
+        let slot_2 = db.storage(
+            L1_GAS_PRICE_ORACLE_ADDRESS,
+            token_registry_base + U256::from(2),
+        )?;
+        let slot_2_bytes = slot_2.to_be_bytes::<32>();
+        let is_active = slot_2_bytes[31] != 0;
+        let decimals = slot_2_bytes[30];
+
+        // Read scale from slot + 3
+        let scale = db.storage(
+            L1_GAS_PRICE_ORACLE_ADDRESS,
+            token_registry_base + U256::from(3),
+        )?;
+
+        // Get price ratio from priceRatio mapping
+        let price_ratio = load_mapping_value(
+            db,
+            L1_GAS_PRICE_ORACLE_ADDRESS,
+            PRICE_RATIO_SLOT,
+            token_id.to_be_bytes().to_vec(),
+        )?;
+
+        // Get caller's token balance
         let caller_token_balance = get_erc20_balance(db, token_address, caller, token_balance_slot);
 
-        let ecc20_fee = Erc20FeeInfo {
+        let erc20_fee = Erc20FeeInfo {
             token_address,
-            price: token_price,
+            is_active,
+            decimals,
+            price_ratio,
+            scale,
             caller,
             balance: caller_token_balance,
             balance_slot: token_balance_slot,
         };
 
-        Ok(Some(ecc20_fee))
+        Ok(Some(erc20_fee))
     }
+}
+
+/// Calculate the storage slot for a mapping value
+fn get_mapping_slot(slot_index: U256, mut key: Vec<u8>) -> U256 {
+    let mut pre_image = slot_index.to_be_bytes_vec();
+    pre_image.append(&mut key);
+    let storage_key = crate::primitives::keccak256(pre_image);
+    U256::from_be_bytes(storage_key.0)
 }
 
 fn load_mapping_value<DB: Database>(
     db: &mut DB,
     account: Address,
     slot_index: U256,
-    mut key: Vec<u8>,
+    key: Vec<u8>,
 ) -> Result<U256, <DB as Database>::Error> {
-    let mut pre_image = slot_index.to_be_bytes_vec();
-    pre_image.append(&mut key);
-    let storage_key = crate::primitives::keccak256(pre_image);
-    let storage_value = db.storage(account, U256::from_be_bytes(storage_key.0))?;
+    let storage_slot = get_mapping_slot(slot_index, key);
+    let storage_value = db.storage(account, storage_slot)?;
     Ok(storage_value)
 }
 
@@ -143,5 +170,21 @@ pub(super) fn get_erc20_balance<DB: Database>(
             U256::ZERO
         }
         Err(_) => U256::ZERO,
+    }
+}
+
+pub fn eth_to_erc20(eth_amount: U256, rate: U256, token_scale: U256) -> U256 {
+    if rate.is_zero() {
+        return U256::ZERO;
+    }
+    // EthToERC20 erc20Amount = ethAmount / (tokenRate / tokenScale) = ethAmount * tokenScale / tokenRate
+    // Calculate: (eth_amount * token_scale) / rate
+    let (erc20_amount, remainder) = eth_amount.saturating_mul(token_scale).div_rem(rate);
+
+    // If there's a remainder, round up by adding 1
+    if !remainder.is_zero() {
+        erc20_amount.saturating_add(U256::from(1))
+    } else {
+        erc20_amount
     }
 }
