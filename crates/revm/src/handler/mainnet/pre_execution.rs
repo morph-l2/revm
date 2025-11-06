@@ -8,7 +8,7 @@ use crate::{
         db::Database,
         eip7702, Account, Bytecode, EVMError, Env, Spec,
         SpecId::{CANCUN, PRAGUE, SHANGHAI},
-        TxKind, BLOCKHASH_STORAGE_ADDRESS, U256, KECCAK_EMPTY,
+        TxKind, BLOCKHASH_STORAGE_ADDRESS, KECCAK_EMPTY, U256,
     },
     Context, ContextPrecompiles,
 };

@@ -19,8 +19,8 @@ pub const BERLIN: PrecompileWithAddress =
     PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(berlin_run));
 
 /// `modexp` precompile with OSAKA gas rules.
-pub const OSAKA: Precompile =
-    Precompile::new(crate::u64_to_address(5), Precompile::Standard(osaka_run));
+pub const OSAKA: PrecompileWithAddress =
+    PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(osaka_run));
 
 #[cfg(feature = "morph")]
 pub const BERNOULLI: PrecompileWithAddress = PrecompileWithAddress(
@@ -29,8 +29,8 @@ pub const BERNOULLI: PrecompileWithAddress = PrecompileWithAddress(
 );
 
 #[cfg(feature = "morph")]
-pub const OSAKA: Precompile =
-    Precompile::new(crate::u64_to_address(5), Precompile::Standard(osaka_run));
+pub const OSAKA: PrecompileWithAddress =
+    PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(osaka_run));
 
 /// See: <https://eips.ethereum.org/EIPS/eip-198>
 /// See: <https://etherscan.io/address/0000000000000000000000000000000000000005>
@@ -48,8 +48,8 @@ pub fn berlin_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
 
 /// See: <https://eips.ethereum.org/EIPS/eip-7823>
 /// Gas cost of berlin is modified from byzantium.
-pub fn osaka_run(input: &[u8], gas_limit: u64) -> PrecompileResult {
-    run_inner::<_, true>(input, gas_limit, 500, |a, b, c, d| {
+pub fn osaka_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
+    run_inner(input, gas_limit, 500, |a, b, c, d| {
         osaka_gas_calc(a, b, c, d)
     })
 }
@@ -99,7 +99,8 @@ pub fn osaka_run(input: &[u8], gas_limit: u64) -> PrecompileResult {
     })
 }
 
-pub fn calculate_iteration_count(exp_length: u64, exp_highp: &U256) -> u64 {
+/// Calculate the iteration count for the modexp precompile.
+pub fn calculate_iteration_count<const MULTIPLIER: u64>(exp_length: u64, exp_highp: &U256) -> u64 {
     let mut iteration_count: u64 = 0;
 
     if exp_length <= 32 && exp_highp.is_zero() {
@@ -107,7 +108,7 @@ pub fn calculate_iteration_count(exp_length: u64, exp_highp: &U256) -> u64 {
     } else if exp_length <= 32 {
         iteration_count = exp_highp.bit_len() as u64 - 1;
     } else if exp_length > 32 {
-        iteration_count = (8u64.saturating_mul(exp_length - 32))
+        iteration_count = (MULTIPLIER.saturating_mul(exp_length - 32))
             .saturating_add(max(1, exp_highp.bit_len() as u64) - 1);
     }
 

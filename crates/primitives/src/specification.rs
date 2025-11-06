@@ -30,7 +30,7 @@ pub enum SpecId {
     CANCUN = 17,          // Cancun                 19426587 (Timestamp: 1710338135)
     PRAGUE = 18,          // Prague                 TBD
     PRAGUE_EOF = 19,      // Prague+EOF             TBD
-    OSAKA = 20,           // Osaka                  
+    OSAKA = 20,           // Osaka
     #[default]
     LATEST = u8::MAX,
 }
@@ -113,7 +113,7 @@ pub enum SpecId {
     CURIE = 19,
     MORPH203 = 20, // revert Precompiles: RIPEMD-160, point evaluation, modexp, ecPairing
     VIRIDIAN = 21, // Support EIP-7702
-    EMERALD = 22, // EMERALD upgrade
+    EMERALD = 22,  // EMERALD upgrade
     CANCUN = 23,
     PRAGUE = 24,
     PRAGUE_EOF = 25,
@@ -212,6 +212,7 @@ impl From<SpecId> for &'static str {
             SpecId::CANCUN => "Cancun",
             SpecId::PRAGUE => "Prague",
             SpecId::PRAGUE_EOF => "PragueEOF",
+            SpecId::OSAKA => "Osaka",
             #[cfg(feature = "optimism")]
             SpecId::BEDROCK => "Bedrock",
             #[cfg(feature = "optimism")]

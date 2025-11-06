@@ -21,8 +21,8 @@ pub fn gt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
 /// Implements the CLZ instruction - count leading zeros.
 pub fn clz<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     // check!(interpreter, OSAKA);
-    //gas!(nterpreter, gas::LOW);
-    pop_top!([], op1, interpreter);
+    // gas!(interpreter, gas::LOW);
+    pop_top!(interpreter, op1);
 
     let leading_zeros = op1.leading_zeros();
     *op1 = U256::from(leading_zeros);
@@ -135,7 +135,7 @@ pub fn sar<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
 mod tests {
     use crate::instructions::bitwise::{byte, clz, sar, shl, shr};
     use crate::{Contract, DummyHost, Interpreter};
-    use revm_primitives::{SpecId, uint, Env, LatestSpec, U256};
+    use revm_primitives::{uint, Env, LatestSpec, SpecId, U256};
 
     #[test]
     fn test_shift_left() {
@@ -442,9 +442,8 @@ mod tests {
 
     #[test]
     fn test_clz() {
+        let mut host = DummyHost::new(Env::default());
         let mut interpreter = Interpreter::default();
-        interpreter.set_spec_id(SpecId::OSAKA);
-
         struct TestCase {
             value: U256,
             expected: U256,

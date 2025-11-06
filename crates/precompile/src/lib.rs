@@ -258,7 +258,7 @@ impl Precompiles {
             precompiles.extend(bls12_381::precompiles()); // add BLS12-381 precompiles
             precompiles.extend([
                 modexp::OSAKA, // 0x05
-                secp256r1::P256VERIFY_OSAKA
+                secp256r1::P256VERIFY_OSAKA,
             ]);
             Box::new(precompiles)
         })
