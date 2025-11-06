@@ -462,7 +462,7 @@ opcodes! {
     0x1B => SHL    => bitwise::shl::<H, SPEC> => stack_io(2, 1);
     0x1C => SHR    => bitwise::shr::<H, SPEC> => stack_io(2, 1);
     0x1D => SAR    => bitwise::sar::<H, SPEC> => stack_io(2, 1);
-    // 0x1E
+    0x1E => CLZ    => bitwise::clz            => stack_io(1, 1);
     // 0x1F
     0x20 => KECCAK256 => system::keccak256    => stack_io(2, 1);
     // 0x21
@@ -792,8 +792,8 @@ mod tests {
                 eof_opcode_num += 1;
             }
         }
-        assert_eq!(opcode_num, 168);
-        assert_eq!(eof_opcode_num, 152);
+        assert_eq!(opcode_num, 169);
+        assert_eq!(eof_opcode_num, 153);
     }
 
     #[test]

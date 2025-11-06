@@ -68,6 +68,8 @@ impl Precompiles {
             PrecompileSpecId::MORPH203 => Self::morph203(),
             #[cfg(feature = "morph")]
             PrecompileSpecId::VIRIDIAN => Self::viridian(),
+            #[cfg(feature = "morph")]
+            PrecompileSpecId::EMERALD => Self::emerald(),
             PrecompileSpecId::CANCUN => Self::cancun(),
             PrecompileSpecId::PRAGUE => Self::prague(),
             PrecompileSpecId::LATEST => Self::latest(),
@@ -247,6 +249,21 @@ impl Precompiles {
         })
     }
 
+    /// Returns precompiles for Morph
+    #[cfg(feature = "morph")]
+    pub fn emerald() -> &'static Self {
+        static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+        INSTANCE.get_or_init(|| {
+            let precompiles = Self::viridian().clone();
+            precompiles.extend(bls12_381::precompiles()); // add BLS12-381 precompiles
+            precompiles.extend([
+                modexp::OSAKA, // 0x05
+                secp256r1::P256VERIFY_OSAKA
+            ]);
+            Box::new(precompiles)
+        })
+    }
+
     /// Returns the precompiles for the latest spec.
     pub fn latest() -> &'static Self {
         Self::prague()
@@ -352,6 +369,8 @@ pub enum PrecompileSpecId {
     MORPH203,
     #[cfg(feature = "morph")]
     VIRIDIAN,
+    #[cfg(feature = "morph")]
+    EMERALD,
     CANCUN,
     PRAGUE,
     LATEST,
@@ -383,6 +402,8 @@ impl PrecompileSpecId {
             MORPH203 => Self::MORPH203,
             #[cfg(feature = "morph")]
             VIRIDIAN => Self::VIRIDIAN,
+            #[cfg(feature = "morph")]
+            EMERALD => Self::EMERALD,
         }
     }
 }
