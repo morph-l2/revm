@@ -7,13 +7,11 @@ use crate::{
     interpreter::{
         CallInputs, CreateInputs, EOFCreateInputs, Host, InterpreterAction, SharedMemory,
     },
-    morph::{
-        erc20_fee::{eth_to_erc20, L2_FEE_VAULT},
-        Erc20FeeInfo,
-    },
+    morph::{erc20_fee::L2_FEE_VAULT, Erc20FeeInfo},
     primitives::{
-        specification::SpecId, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult, EnvWithHandlerCfg,
-        ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind, EOF_MAGIC_BYTES, U256,
+        eth_to_erc20, specification::SpecId, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult,
+        EnvWithHandlerCfg, ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind,
+        EOF_MAGIC_BYTES, U256,
     },
     Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult,
 };

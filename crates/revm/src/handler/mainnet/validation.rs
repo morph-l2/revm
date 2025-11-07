@@ -26,15 +26,16 @@ pub fn validate_tx_against_state<SPEC: Spec, EXT, DB: Database>(
         .journaled_state
         .load_code(tx_caller, &mut context.evm.inner.db)?;
 
-    let erc20_balance = match &context.evm.inner.erc20_fee_info {
-        Some(fee_info) => fee_info.balance,
-        None => U256::ZERO,
+    let erc20_info = match &context.evm.inner.erc20_fee_info {
+        Some(fee_info) => (fee_info.balance, fee_info.price_ratio, fee_info.scale),
+        None => (U256::ZERO, U256::ZERO, U256::ZERO),
     };
+
     context
         .evm
         .inner
         .env
-        .validate_tx_against_state::<SPEC>(caller_account.data, erc20_balance)
+        .validate_tx_against_state::<SPEC>(caller_account.data, erc20_info)
         .map_err(EVMError::Transaction)?;
 
     Ok(())

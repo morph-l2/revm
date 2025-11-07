@@ -173,18 +173,3 @@ pub(super) fn get_erc20_balance<DB: Database>(
     }
 }
 
-pub fn eth_to_erc20(eth_amount: U256, rate: U256, token_scale: U256) -> U256 {
-    if rate.is_zero() {
-        return U256::ZERO;
-    }
-    // EthToERC20 erc20Amount = ethAmount / (tokenRate / tokenScale) = ethAmount * tokenScale / tokenRate
-    // Calculate: (eth_amount * token_scale) / rate
-    let (erc20_amount, remainder) = eth_amount.saturating_mul(token_scale).div_rem(rate);
-
-    // If there's a remainder, round up by adding 1
-    if !remainder.is_zero() {
-        erc20_amount.saturating_add(U256::from(1))
-    } else {
-        erc20_amount
-    }
-}

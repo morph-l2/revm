@@ -241,7 +241,7 @@ impl Env {
     pub fn validate_tx_against_state<SPEC: Spec>(
         &self,
         account: &mut Account,
-        erc20_balance: U256,
+        erc20_info: (U256, U256, U256),
     ) -> Result<(), InvalidTransaction> {
         // EIP-3607: Reject transactions from senders with deployed code
         // This EIP is introduced after london but there was no collision in past
@@ -269,9 +269,12 @@ impl Env {
             }
         }
 
-        let mut balance_check = U256::from(self.tx.gas_limit)
+        let gas_cost = U256::from(self.tx.gas_limit)
             .checked_mul(self.tx.gas_price)
-            .and_then(|gas_cost| gas_cost.checked_add(self.tx.value))
+            .ok_or(InvalidTransaction::OverflowPaymentInTransaction)?;
+
+        let mut balance_check = gas_cost
+            .checked_add(self.tx.value)
             .ok_or(InvalidTransaction::OverflowPaymentInTransaction)?;
 
         if SPEC::enabled(SpecId::CANCUN) {
@@ -285,7 +288,8 @@ impl Env {
         // Check if account has enough balance for gas_limit*gas_price and value transfer.
         // Transfer will be done inside `*_inner` functions.
         let lack_of_fund_for_max_fee = if self.tx.fee_token_id.unwrap_or_default() != 0 {
-            balance_check > erc20_balance
+            let erc20_check = eth_to_erc20(gas_cost, erc20_info.1, erc20_info.2);
+            erc20_check > erc20_info.0 || self.tx.value > account.info.balance
         } else {
             balance_check > account.info.balance
         };
@@ -790,6 +794,22 @@ pub enum AnalysisKind {
     /// Perform bytecode analysis.
     #[default]
     Analyse,
+}
+
+pub fn eth_to_erc20(eth_amount: U256, rate: U256, token_scale: U256) -> U256 {
+    if rate.is_zero() {
+        return U256::ZERO;
+    }
+    // EthToERC20 erc20Amount = ethAmount / (tokenRate / tokenScale) = ethAmount * tokenScale / tokenRate
+    // Calculate: (eth_amount * token_scale) / rate
+    let (erc20_amount, remainder) = eth_amount.saturating_mul(token_scale).div_rem(rate);
+
+    // If there's a remainder, round up by adding 1
+    if !remainder.is_zero() {
+        erc20_amount.saturating_add(U256::from(1))
+    } else {
+        erc20_amount
+    }
 }
 
 #[cfg(test)]
