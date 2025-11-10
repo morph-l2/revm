@@ -35,6 +35,62 @@ fn erc20_fee_normal() {
     let balance_value = U256::from(100000000u64);
     let _ = cache_db.insert_account_storage(token_account, storage_key_u256, balance_value);
 
+    // Set ERC20PriceOracle storage
+    let oracle_address = address!("530000000000000000000000000000000000000F");
+    let token_id: u16 = 1;
+    
+    // Calculate base slot for tokenRegistry[1]
+    // tokenRegistry is at slot 0
+    let token_registry_slot = U256::ZERO;
+    let mut token_id_bytes = [0u8; 32];
+    token_id_bytes[30..32].copy_from_slice(&token_id.to_be_bytes());
+    
+    let mut pre_image = token_registry_slot.to_be_bytes_vec();
+    pre_image.extend_from_slice(&token_id_bytes);
+    let token_registry_base = keccak256(&pre_image);
+    let token_registry_base_u256 = U256::from_be_bytes(token_registry_base.0);
+    
+    // TokenInfo struct layout:
+    // slot + 0: tokenAddress (address, 20 bytes) + 12 bytes padding
+    // slot + 1: balanceSlot (bytes32, 32 bytes)
+    // slot + 2: isActive (bool, 1 byte) + decimals (uint8, 1 byte) + 30 bytes padding
+    // slot + 3: scale (uint256, 32 bytes)
+    
+    // Set tokenAddress at slot + 0
+    let token_address_value = U256::from_be_bytes(token_account.into_word().into());
+    let _ = cache_db.insert_account_storage(oracle_address, token_registry_base_u256, token_address_value);
+    
+    // Set balanceSlot at slot + 1 (using slot 0 for ERC20 balance mapping)
+    let balance_slot_value = U256::ZERO;
+    let _ = cache_db.insert_account_storage(oracle_address, token_registry_base_u256 + U256::from(1), balance_slot_value);
+    
+    // Set isActive and decimals at slot + 2
+    // isActive = true (1), decimals = 18
+    // In storage: rightmost byte (byte 31) is isActive, byte 30 is decimals
+    let mut slot_2_bytes = [0u8; 32];
+    slot_2_bytes[30] = 18; // decimals
+    slot_2_bytes[31] = 1;  // isActive = true
+    let slot_2_value = U256::from_be_bytes(slot_2_bytes);
+    let _ = cache_db.insert_account_storage(oracle_address, token_registry_base_u256 + U256::from(2), slot_2_value);
+    
+    // Set scale at slot + 3
+    // scale = 10^18 (1e18)
+    let scale_value = U256::from(1_000_000_000_000_000_000u128);
+    let _ = cache_db.insert_account_storage(oracle_address, token_registry_base_u256 + U256::from(3), scale_value);
+    
+    // Set priceRatio for tokenID 1
+    // priceRatio is at slot 2
+    let price_ratio_slot = U256::from(2);
+    let mut price_ratio_pre_image = price_ratio_slot.to_be_bytes_vec();
+    price_ratio_pre_image.extend_from_slice(&token_id_bytes);
+    let price_ratio_storage_slot = keccak256(&price_ratio_pre_image);
+    let price_ratio_storage_slot_u256 = U256::from_be_bytes(price_ratio_storage_slot.0);
+    
+    // Set price ratio to 1e18 (1:1 ratio with ETH for simplicity)
+    let price_ratio_value = U256::from(1_000_000_000_000_000_000u128);
+    let _ = cache_db.insert_account_storage(oracle_address, price_ratio_storage_slot_u256, price_ratio_value);
+
+
     let acc_info = AccountInfo {
         nonce: 0_u64,
         balance: U256::from(1_000_000_000_000_000_000u128),
@@ -55,6 +111,7 @@ fn erc20_fee_normal() {
         nonce: None,
         chain_id: None,
         fee_token_id: Some(1u16),
+        fee_limit: Some(100000u64),
         ..Default::default()
     };
 

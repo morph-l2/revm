@@ -288,8 +288,12 @@ impl Env {
         // Check if account has enough balance for gas_limit*gas_price and value transfer.
         // Transfer will be done inside `*_inner` functions.
         let lack_of_fund_for_max_fee = if self.tx.fee_token_id.unwrap_or_default() != 0 {
+            let mut fee_limit = U256::from(self.tx.fee_limit.unwrap_or_default());
+            if fee_limit.is_zero() || fee_limit > erc20_info.0 {
+                fee_limit = erc20_info.0
+            }
             let erc20_check = eth_to_erc20(gas_cost, erc20_info.1, erc20_info.2);
-            erc20_check > erc20_info.0 || self.tx.value > account.info.balance
+            erc20_check > fee_limit || self.tx.value > account.info.balance
         } else {
             balance_check > account.info.balance
         };
@@ -649,6 +653,9 @@ pub struct TxEnv {
     #[cfg(feature = "morph")]
     /// For ERC20FeeType
     pub fee_token_id: Option<u16>,
+    #[cfg(feature = "morph")]
+    /// For ERC20FeeType
+    pub fee_limit: Option<u64>,
 }
 
 pub enum TxType {
@@ -695,6 +702,7 @@ impl Default for TxEnv {
             #[cfg(feature = "morph")]
             morph: MorphFields::default(),
             fee_token_id: None,
+            fee_limit: None,
         }
     }
 }
