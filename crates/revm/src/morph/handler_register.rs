@@ -33,16 +33,6 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
         crate::morph::L1BlockInfo::try_fetch(&mut context.evm.inner.db, SPEC::SPEC_ID)
             .map_err(EVMError::Database)?;
     context.evm.inner.l1_block_info = Some(l1_block_info);
-
-    let fee_token_id = context.evm.inner.env().tx.fee_token_id.unwrap_or_default();
-    if fee_token_id != 0 {
-        let caller = context.evm.inner.env.tx.caller;
-        let erc20_fee_info =
-            crate::morph::Erc20FeeInfo::try_fetch(&mut context.evm.inner.db, fee_token_id, caller)
-                .map_err(EVMError::Database)?;
-        context.evm.inner.erc20_fee_info = erc20_fee_info;
-    }
-
     mainnet::load_accounts::<SPEC, EXT, DB>(context)
 }
 

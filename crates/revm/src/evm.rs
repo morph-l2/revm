@@ -231,6 +231,18 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
     /// This function will validate the transaction.
     #[inline]
     pub fn transact(&mut self) -> EVMResult<DB::Error> {
+        let context = &mut self.context;
+        let fee_token_id = context.evm.inner.env().tx.fee_token_id.unwrap_or_default();
+        if fee_token_id != 0 {
+            let caller = context.evm.inner.env.tx.caller;
+            let erc20_fee_info = crate::morph::Erc20FeeInfo::try_fetch(
+                &mut context.evm.inner.db,
+                fee_token_id,
+                caller,
+            )
+            .map_err(EVMError::Database)?;
+            context.evm.inner.erc20_fee_info = erc20_fee_info;
+        }
         let initial_gas_spend = self.preverify_transaction_inner().inspect_err(|_| {
             self.clear();
         })?;
@@ -343,8 +355,8 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         {
             let ctx = &mut self.context;
             let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
-            if let Some(token_fee) = erc20_fee_info {
-                self.deduct_caller_with_erc20(token_fee)?;
+            if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
+                self.deduct_caller_with_erc20(erc20_fee_info)?;
             } else {
                 self.handler.pre_execution().deduct_caller(ctx)?;
             }
@@ -404,8 +416,8 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         {
             let ctx = &mut self.context;
             let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
-            if let Some(token_fee) = erc20_fee_info {
-                self.reimburse_caller_with_erc20(token_fee, result.gas())?;
+            if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
+                self.reimburse_caller_with_erc20(erc20_fee_info, result.gas())?;
             } else {
                 post_exec.reimburse_caller(ctx, result.gas())?;
             }
@@ -425,8 +437,14 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
     #[inline]
     pub fn deduct_caller_with_erc20(
         &mut self,
-        erc20_info: Erc20FeeInfo,
+        erc20_info: Option<Erc20FeeInfo>,
     ) -> Result<(), EVMError<DB::Error>> {
+        let Some(erc20_info) = erc20_info else {
+            return Err(EVMError::Custom(
+                "[MORPH] Failed to calculate erc20 gas.".to_string(),
+            ));
+        };
+
         let ctx = &self.context;
         let Some(rlp_bytes) = &ctx.evm.inner.env.tx.morph.rlp_bytes else {
             return Err(EVMError::Custom(
@@ -451,10 +469,9 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 "[MORPH] Failed to calculate erc20 gas.".to_string(),
             ));
         }
-
         if erc20_amount > erc20_info.balance {
             return Err(EVMError::Custom(
-                "[MORPH] Erc20 balance is insufficient to pay gas.".to_string(),
+                "[MORPH] Token balance is insufficient to pay gas.".to_string(),
             ));
         }
         // Call transfer(address,uint256) method via EVM
@@ -462,12 +479,14 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
 
         // Encode calldata: method_id + padded to address + amount
-        let mut calldata = Vec::with_capacity(68);
+        let mut calldata = Vec::new();
         calldata.extend_from_slice(&method_id);
-        calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
-        calldata.extend_from_slice(L2_FEE_VAULT.as_slice());
+        // calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
+        let mut address_bytes = [0u8; 32];
+        address_bytes[12..32].copy_from_slice(L2_FEE_VAULT.as_slice());
+        calldata.extend_from_slice(&address_bytes);
         calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
-        let tx = TxEnv {
+        let mut tx = TxEnv {
             caller: erc20_info.caller,
             gas_limit: 1_000_00u64,
             gas_price: U256::ZERO,
@@ -478,40 +497,16 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             chain_id: None,
             ..Default::default()
         };
+        tx.morph.is_l1_msg = false;
+        tx.morph.rlp_bytes = Some(Bytes::default());
 
-        // let ctx = &mut self.context;
-        // let exec = self.handler.execution();
-        // let call = exec.call(
-        //     ctx,
-        //     CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap(),
-        // )?;
-        // let mut _result = match call {
-        //     FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
-        //     FrameOrResult::Result(result) => result,
-        // };
-
-        let origin_tx = self.context.evm.inner.env.tx.clone();
-        self.context.evm.inner.env.tx = tx;
-
-        let _ = self.transact_preverified_inner(0);
-        // load caller's account.
         let ctx = &mut self.context;
-        let caller_account = ctx
-            .evm
-            .inner
-            .journaled_state
-            .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?
-            .data;
-        caller_account.info.nonce = caller_account.info.nonce.saturating_sub(1);
-        ctx.evm.inner.env.tx = origin_tx;
-
-        // bump the nonce for calls. Nonce for CREATE will be bumped in `handle_create`.
-        if matches!(ctx.evm.inner.env.tx.transact_to, TxKind::Call(_)) {
-            // Nonce is already checked
-            caller_account.info.nonce = caller_account.info.nonce.saturating_add(1);
-        }
-        // touch account so we know it is changed.
-        caller_account.mark_touch();
+        let exec = self.handler.execution();
+        let call = exec.call(ctx, CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap())?;
+        let mut _result = match call {
+            FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
+            FrameOrResult::Result(result) => result,
+        };
 
         Ok(())
     }
@@ -519,18 +514,20 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
     #[inline]
     pub fn reimburse_caller_with_erc20(
         &mut self,
-        erc20_info: Erc20FeeInfo,
+        erc20_info: Option<Erc20FeeInfo>,
         gas: &Gas,
     ) -> Result<(), EVMError<DB::Error>> {
+        let Some(erc20_info) = erc20_info else {
+            return Err(EVMError::Custom(
+                "[MORPH] Failed to calculate erc20 gas.".to_string(),
+            ));
+        };
         let ctx = &self.context;
-
         let effective_gas_price = ctx.evm.env.effective_gas_price();
         let amount = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
         let erc20_amount = eth_to_erc20(amount, erc20_info.price_ratio, erc20_info.scale);
         if erc20_amount.is_zero() {
-            return Err(EVMError::Custom(
-                "[MORPH] Failed to calculate erc20 gas.".to_string(),
-            ));
+            return Ok(());
         }
         // Call transfer(address,uint256) method via EVM
         // Method signature: transfer(address,uint256) -> 0xa9059cbb
@@ -540,9 +537,11 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let mut calldata = Vec::with_capacity(68);
         calldata.extend_from_slice(&method_id);
         calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
-        calldata.extend_from_slice(erc20_info.caller.as_slice());
+        let mut address_bytes = [0u8; 32];
+        address_bytes[12..32].copy_from_slice(erc20_info.caller.as_slice());
+        calldata.extend_from_slice(&address_bytes);
         calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
-        let tx = TxEnv {
+        let mut tx = TxEnv {
             caller: L2_FEE_VAULT,
             gas_limit: 1_000_00u64,
             gas_price: U256::ZERO,
@@ -553,20 +552,15 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             chain_id: None,
             ..Default::default()
         };
-        let origin_tx = self.context.evm.inner.env.tx.clone();
-        self.context.evm.inner.env.tx = tx;
-
-        let _ = self.transact_preverified_inner(0);
-        // load caller's account.
+        tx.morph.is_l1_msg = false;
+        tx.morph.rlp_bytes = Some(Bytes::default());
         let ctx = &mut self.context;
-        let fee_vault_account = ctx
-            .evm
-            .inner
-            .journaled_state
-            .load_account(L2_FEE_VAULT, &mut ctx.evm.inner.db)?
-            .data;
-        fee_vault_account.info.nonce = fee_vault_account.info.nonce.saturating_sub(1);
-        self.context.evm.inner.env.tx = origin_tx;
+        let exec = self.handler.execution();
+        let call = exec.call(ctx, CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap())?;
+        let mut _result = match call {
+            FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
+            FrameOrResult::Result(result) => result,
+        };
 
         Ok(())
     }
