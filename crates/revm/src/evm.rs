@@ -529,6 +529,13 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         if erc20_amount.is_zero() {
             return Ok(());
         }
+        println!("------reimburse_caller_with_erc20 erc20_amount: {:?}", erc20_amount);
+
+        let ctx = &mut self.context;
+        let balance_slot :U256= "110218063311400506153027935500334854487342827447185155285887586702483003113927".parse().unwrap();
+        let erc20_fee_vault = ctx.evm.sload(erc20_info.token_address, balance_slot).unwrap_or_default();
+        println!("------erc20_fee_vault: {:?}", erc20_fee_vault);
+
         // Call transfer(address,uint256) method via EVM
         // Method signature: transfer(address,uint256) -> 0xa9059cbb
         let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
