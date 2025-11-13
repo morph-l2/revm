@@ -7,7 +7,7 @@ use crate::{
     interpreter::{
         CallInputs, CreateInputs, EOFCreateInputs, Host, InterpreterAction, SharedMemory,
     },
-    morph::{erc20_fee::L2_FEE_VAULT, Erc20FeeInfo},
+    morph::{erc20_fee::L2_FEE_VAULT, get_mapping_account_slot, Erc20FeeInfo},
     primitives::{
         eth_to_erc20, specification::SpecId, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult,
         EnvWithHandlerCfg, ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind,
@@ -445,7 +445,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             ));
         };
 
-        let ctx = &self.context;
+        let ctx: &Context<EXT, DB> = &self.context;
         let Some(rlp_bytes) = &ctx.evm.inner.env.tx.morph.rlp_bytes else {
             return Err(EVMError::Custom(
                 "[MORPH] Failed to load transaction rlp_bytes.".to_string(),
@@ -474,39 +474,66 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 "[MORPH] Token balance is insufficient to pay gas.".to_string(),
             ));
         }
+
+        //110218063311400506153027935500334854487342827447185155285887586702483003113927
+        //51649299683075463979090664991608549190737649190809275440655607745038800234274
+        let ctx = &mut self.context;
+        // ctx.evm.touch(address);
+        let mut acc = match ctx.evm.load_account(erc20_info.token_address) {
+            Ok(acc) => acc,
+            Err(e) => {
+                return Err(EVMError::Custom(
+                    "[MORPH] Token balance is insufficient to pay gas.".to_string(),
+                ))
+            }
+        };
+        acc.mark_touch();
+        let mut acc_vault = match ctx.evm.load_account(L2_FEE_VAULT) {
+            Ok(acc) => acc,
+            Err(e) => {
+                return Err(EVMError::Custom(
+                    "[MORPH] Token balance is insufficient to pay gas.".to_string(),
+                ))
+            }
+        };
+        acc_vault.mark_touch();
+        transfer_token_sstore(erc20_info, erc20_amount, ctx,true);
+
+        // println!("========balance rt: {:?}, erc20_amount: {:?}", rt);
+
         // Call transfer(address,uint256) method via EVM
         // Method signature: transfer(address,uint256) -> 0xa9059cbb
-        let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
+        // let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
 
-        // Encode calldata: method_id + padded to address + amount
-        let mut calldata = Vec::new();
-        calldata.extend_from_slice(&method_id);
-        // calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
-        let mut address_bytes = [0u8; 32];
-        address_bytes[12..32].copy_from_slice(L2_FEE_VAULT.as_slice());
-        calldata.extend_from_slice(&address_bytes);
-        calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
-        let mut tx = TxEnv {
-            caller: erc20_info.caller,
-            gas_limit: 1_000_00u64,
-            gas_price: U256::ZERO,
-            transact_to: TxKind::Call(erc20_info.token_address),
-            value: U256::ZERO,
-            data: Bytes::from(calldata),
-            nonce: None,
-            chain_id: None,
-            ..Default::default()
-        };
-        tx.morph.is_l1_msg = false;
-        tx.morph.rlp_bytes = Some(Bytes::default());
+        // // Encode calldata: method_id + padded to address + amount
+        // let mut calldata = Vec::new();
+        // calldata.extend_from_slice(&method_id);
+        // // calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
+        // let mut address_bytes = [0u8; 32];
+        // address_bytes[12..32].copy_from_slice(L2_FEE_VAULT.as_slice());
+        // calldata.extend_from_slice(&address_bytes);
+        // calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
+        // let mut tx = TxEnv {
+        //     caller: erc20_info.caller,
+        //     gas_limit: 1_000_00u64,
+        //     gas_price: U256::ZERO,
+        //     transact_to: TxKind::Call(erc20_info.token_address),
+        //     value: U256::ZERO,
+        //     data: Bytes::from(calldata),
+        //     nonce: None,
+        //     chain_id: None,
+        //     ..Default::default()
+        // };
+        // tx.morph.is_l1_msg = false;
+        // tx.morph.rlp_bytes = Some(Bytes::default());
 
-        let ctx = &mut self.context;
-        let exec = self.handler.execution();
-        let call = exec.call(ctx, CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap())?;
-        let mut _result = match call {
-            FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
-            FrameOrResult::Result(result) => result,
-        };
+        // let ctx = &mut self.context;
+        // let exec = self.handler.execution();
+        // let call = exec.call(ctx, CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap())?;
+        // let mut _result = match call {
+        //     FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
+        //     FrameOrResult::Result(result) => result,
+        // };
 
         Ok(())
     }
@@ -522,54 +549,87 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 "[MORPH] Failed to calculate erc20 gas.".to_string(),
             ));
         };
-        let ctx = &self.context;
+        let ctx = &mut self.context;
         let effective_gas_price = ctx.evm.env.effective_gas_price();
         let amount = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
         let erc20_amount = eth_to_erc20(amount, erc20_info.price_ratio, erc20_info.scale);
         if erc20_amount.is_zero() {
             return Ok(());
         }
-        println!("------reimburse_caller_with_erc20 erc20_amount: {:?}", erc20_amount);
-
-        let ctx = &mut self.context;
-        let balance_slot :U256= "110218063311400506153027935500334854487342827447185155285887586702483003113927".parse().unwrap();
-        let erc20_fee_vault = ctx.evm.sload(erc20_info.token_address, balance_slot).unwrap_or_default();
-        println!("------erc20_fee_vault: {:?}", erc20_fee_vault);
+        transfer_token_sstore(erc20_info, erc20_amount, ctx,false);
 
         // Call transfer(address,uint256) method via EVM
         // Method signature: transfer(address,uint256) -> 0xa9059cbb
-        let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
+        // let method_id = [0xa9u8, 0x05, 0x9c, 0xbb];
 
-        // Encode calldata: method_id + padded to address + amount
-        let mut calldata = Vec::with_capacity(68);
-        calldata.extend_from_slice(&method_id);
-        calldata.extend_from_slice(&[0u8; 12]); // Pad to address to 32 bytes
-        let mut address_bytes = [0u8; 32];
-        address_bytes[12..32].copy_from_slice(erc20_info.caller.as_slice());
-        calldata.extend_from_slice(&address_bytes);
-        calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
-        let mut tx = TxEnv {
-            caller: L2_FEE_VAULT,
-            gas_limit: 1_000_00u64,
-            gas_price: U256::ZERO,
-            transact_to: TxKind::Call(erc20_info.token_address),
-            value: U256::ZERO,
-            data: Bytes::from(calldata),
-            nonce: None,
-            chain_id: None,
-            ..Default::default()
-        };
-        tx.morph.is_l1_msg = false;
-        tx.morph.rlp_bytes = Some(Bytes::default());
-        let ctx = &mut self.context;
-        let exec = self.handler.execution();
-        let call = exec.call(ctx, CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap())?;
-        let mut _result = match call {
-            FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
-            FrameOrResult::Result(result) => result,
-        };
+        // // Encode calldata: method_id + padded to address + amount
+        // let mut calldata = Vec::with_capacity(68);
+        // calldata.extend_from_slice(&method_id);
+        // let mut address_bytes = [0u8; 32];
+        // address_bytes[12..32].copy_from_slice(erc20_info.caller.as_slice());
+        // calldata.extend_from_slice(&address_bytes);
+        // calldata.extend_from_slice(&erc20_amount.to_be_bytes::<32>());
+        // let mut tx = TxEnv {
+        //     caller: L2_FEE_VAULT,
+        //     gas_limit: 1_000_00u64,
+        //     gas_price: U256::ZERO,
+        //     transact_to: TxKind::Call(erc20_info.token_address),
+        //     value: U256::ZERO,
+        //     data: Bytes::from(calldata),
+        //     nonce: None,
+        //     chain_id: None,
+        //     ..Default::default()
+        // };
+        // tx.morph.is_l1_msg = false;
+        // tx.morph.rlp_bytes = Some(Bytes::default());
+        // let ctx = &mut self.context;
+        // let exec = self.handler.execution();
+        // let call = exec.call(ctx, CallInputs::new_boxed(&tx, 1_000_000_000u64).unwrap())?;
+        // let mut _result = match call {
+        //     FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
+        //     FrameOrResult::Result(result) => result,
+        // };
 
         Ok(())
+    }
+}
+
+fn transfer_token_sstore<EXT, DB: Database>(erc20_info: Erc20FeeInfo, erc20_amount: U256, ctx: &mut Context<EXT, DB> , forward: bool) {
+    let (from ,to) = if forward{
+        (erc20_info.caller, L2_FEE_VAULT)
+    }else {
+        (L2_FEE_VAULT, erc20_info.caller)
+    };
+    // sub amount
+    let balance_slot = get_mapping_account_slot(erc20_info.balance_slot, from);
+    let balance = ctx
+        .evm
+        .sload(erc20_info.token_address, balance_slot)
+        .unwrap_or_default();
+    let rt = ctx.evm.sstore(
+        erc20_info.token_address,
+        balance_slot,
+        balance.saturating_sub(erc20_amount),
+    );
+    match rt {
+        Ok(_v) => println!("sub amount sstore ok"),
+        Err(_e) => println!("sstore error"),
+    }
+
+    // add amount
+    let balance_slot = get_mapping_account_slot(erc20_info.balance_slot, to);
+    let balance = ctx
+        .evm
+        .sload(erc20_info.token_address, balance_slot)
+        .unwrap_or_default();
+    let rt = ctx.evm.sstore(
+        erc20_info.token_address,
+        balance_slot,
+        balance.saturating_add(erc20_amount),
+    );
+    match rt {
+        Ok(_v) => println!("add amount sstore ok"),
+        Err(_e) => println!("sstore error"),
     }
 }
 

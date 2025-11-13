@@ -108,6 +108,13 @@ fn get_mapping_slot(slot_index: U256, mut key: Vec<u8>) -> U256 {
     U256::from_be_bytes(storage_key.0)
 }
 
+/// Calculate the account's storage slot for a mapping value
+pub fn get_mapping_account_slot(slot_index: U256, account: Address) -> U256 {
+    let mut key = [0u8; 32];
+    key[12..32].copy_from_slice(account.as_slice());
+    get_mapping_slot(slot_index, key.to_vec())
+}
+
 fn load_mapping_value<DB: Database>(
     db: &mut DB,
     account: Address,
@@ -125,8 +132,6 @@ pub(super) fn get_erc20_balance<DB: Database>(
     account: Address,
     token_balance_slot: U256,
 ) -> U256 {
-    println!("get_erc20_balance. token: {:?}", token);
-
     // If balance slot is provided, try to read directly from storage
     if !token_balance_slot.is_zero() {
         let mut data = [0u8; 32];
