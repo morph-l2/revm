@@ -241,7 +241,7 @@ impl Env {
     pub fn validate_tx_against_state<SPEC: Spec>(
         &self,
         account: &mut Account,
-        erc20_info: (U256, U256, U256),
+        token_info: (U256, U256, U256),
     ) -> Result<(), InvalidTransaction> {
         // EIP-3607: Reject transactions from senders with deployed code
         // This EIP is introduced after london but there was no collision in past
@@ -289,11 +289,11 @@ impl Env {
         // Transfer will be done inside `*_inner` functions.
         let lack_of_fund_for_max_fee = if self.tx.fee_token_id.unwrap_or_default() != 0 {
             let mut fee_limit = U256::from(self.tx.fee_limit.unwrap_or_default());
-            if fee_limit.is_zero() || fee_limit > erc20_info.0 {
-                fee_limit = erc20_info.0
+            if fee_limit.is_zero() || fee_limit > token_info.0 {
+                fee_limit = token_info.0
             }
-            let erc20_check = eth_to_erc20(gas_cost, erc20_info.1, erc20_info.2);
-            erc20_check > fee_limit || self.tx.value > account.info.balance
+            let token_check = eth_to_token(gas_cost, token_info.1, token_info.2);
+            token_check > fee_limit || self.tx.value > account.info.balance
         } else {
             balance_check > account.info.balance
         };
@@ -651,10 +651,10 @@ pub struct TxEnv {
     pub morph: MorphFields,
 
     #[cfg(feature = "morph")]
-    /// For ERC20FeeType
+    /// For AltFeeType
     pub fee_token_id: Option<u16>,
     #[cfg(feature = "morph")]
-    /// For ERC20FeeType
+    /// For AltFeeType
     pub fee_limit: Option<u64>,
 }
 
@@ -804,18 +804,18 @@ pub enum AnalysisKind {
     Analyse,
 }
 
-pub fn eth_to_erc20(eth_amount: U256, rate: U256, token_scale: U256) -> U256 {
+pub fn eth_to_token(eth_amount: U256, rate: U256, token_scale: U256) -> U256 {
     if rate.is_zero() {
         return U256::ZERO;
     }
-    // EthToERC20 erc20Amount = ethAmount / (tokenRate / tokenScale) = ethAmount * tokenScale / tokenRate
+    // EthToToken token_amount = ethAmount / (tokenRate / tokenScale) = ethAmount * tokenScale / tokenRate
     // Calculate: (eth_amount * token_scale) / rate
-    let (erc20_amount, remainder) = eth_amount.saturating_mul(token_scale).div_rem(rate);
+    let (token_amount, remainder) = eth_amount.saturating_mul(token_scale).div_rem(rate);
     // If there's a remainder, round up by adding 1
     if !remainder.is_zero() {
-        erc20_amount.saturating_add(U256::from(1))
+        token_amount.saturating_add(U256::from(1))
     } else {
-        erc20_amount
+        token_amount
     }
 }
 

@@ -1,6 +1,6 @@
 use revm::{
     db::{CacheDB, EmptyDB},
-    morph::erc20_fee::L2_FEE_VAULT,
+    morph::token_fee::L2_FEE_VAULT,
     primitives::{address, bytes, keccak256, AccountInfo, Address, Bytecode, Bytes, TxEnv, U256},
     Database, Evm,
 };
@@ -33,7 +33,7 @@ fn alt_fee_normal() {
         ..Default::default()
     };
 
-    // USDT:
+    // 1 ETH = 4000 USDT.
     let (account_from_balance, erc20_value, erc20_value_vault, erc20_balance_evm) =
         exec_alt_fee_txn(1, U256::from(1u64), U256::from(250000000u64), tx);
 
@@ -134,10 +134,10 @@ fn exec_alt_fee_txn(
     );
 
     // Set isActive and decimals at slot + 2
-    // isActive = true (1), decimals = 18
+    // isActive = true (1), decimals = 6
     // In storage: rightmost byte (byte 31) is isActive, byte 30 is decimals
     let mut slot_2_bytes = [0u8; 32];
-    slot_2_bytes[30] = 18; // decimals
+    slot_2_bytes[30] = 6; // decimals
     slot_2_bytes[31] = 1; // isActive = true
     let slot_2_value = U256::from_be_bytes(slot_2_bytes);
     let _ = cache_db.insert_account_storage(
@@ -205,7 +205,6 @@ fn exec_alt_fee_txn(
         .storage(token_account, storage_key_u256)
         .unwrap_or_default();
     println!("account_from_erc20_value: {:?}", erc20_value);
-    println!("storage_key_u256: {:?}", storage_key_u256);
 
     let erc20_value_vault = evm
         .context

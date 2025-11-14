@@ -7,9 +7,9 @@ use crate::{
     interpreter::{
         CallInputs, CreateInputs, EOFCreateInputs, Host, InterpreterAction, SharedMemory,
     },
-    morph::{erc20_fee::L2_FEE_VAULT, get_mapping_account_slot, Erc20FeeInfo},
+    morph::{get_mapping_account_slot, token_fee::L2_FEE_VAULT, TokenFeeInfo},
     primitives::{
-        eth_to_erc20, specification::SpecId, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult,
+        eth_to_token, specification::SpecId, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult,
         EnvWithHandlerCfg, ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind,
         EOF_MAGIC_BYTES, U256,
     },
@@ -235,12 +235,9 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let fee_token_id = context.evm.inner.env().tx.fee_token_id.unwrap_or_default();
         if fee_token_id != 0 {
             let caller = context.evm.inner.env.tx.caller;
-            let erc20_fee_info = crate::morph::Erc20FeeInfo::try_fetch(
-                &mut context.evm.inner.db,
-                fee_token_id,
-                caller,
-            )
-            .map_err(EVMError::Database)?;
+            let erc20_fee_info =
+                TokenFeeInfo::try_fetch(&mut context.evm.inner.db, fee_token_id, caller)
+                    .map_err(EVMError::Database)?;
             context.evm.inner.erc20_fee_info = erc20_fee_info;
         }
         let initial_gas_spend = self.preverify_transaction_inner().inspect_err(|_| {
@@ -340,32 +337,25 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
     fn transact_preverified_inner(&mut self, initial_gas_spend: u64) -> EVMResult<DB::Error> {
         let spec_id = self.spec_id();
 
-        {
-            let ctx = &mut self.context;
-            let pre_exec = self.handler.pre_execution();
-            // load access list and beneficiary if needed.
-            pre_exec.load_accounts(ctx)?;
+        let ctx = &mut self.context;
+        let pre_exec = self.handler.pre_execution();
+        // load access list and beneficiary if needed.
+        pre_exec.load_accounts(ctx)?;
 
-            // load precompiles
-            let precompiles = pre_exec.load_precompiles();
-            ctx.evm.set_precompiles(precompiles);
-        }
+        // load precompiles
+        let precompiles = pre_exec.load_precompiles();
+        ctx.evm.set_precompiles(precompiles);
 
         // deduce caller balance with its limit.
-        {
-            let ctx = &mut self.context;
-            let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
-            if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
-                self.deduct_caller_with_erc20(erc20_fee_info)?;
-            } else {
-                self.handler.pre_execution().deduct_caller(ctx)?;
-            }
+        let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
+        if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
+            self.deduct_caller_with_erc20(erc20_fee_info)?;
+        } else {
+            self.handler.pre_execution().deduct_caller(ctx)?;
         }
 
         let ctx = &mut self.context;
-
         let gas_limit = ctx.evm.env.tx.gas_limit - initial_gas_spend;
-
         let pre_exec = self.handler.pre_execution();
 
         // apply EIP-7702 auth list.
@@ -413,14 +403,13 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // calculate final refund and add EIP-7702 refund to gas.
         post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
         // Reimburse the caller
-        {
-            let ctx = &mut self.context;
-            let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
-            if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
-                self.reimburse_caller_with_erc20(erc20_fee_info, result.gas())?;
-            } else {
-                post_exec.reimburse_caller(ctx, result.gas())?;
-            }
+
+        let ctx = &mut self.context;
+        let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
+        if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
+            self.reimburse_caller_with_erc20(erc20_fee_info, result.gas())?;
+        } else {
+            post_exec.reimburse_caller(ctx, result.gas())?;
         }
 
         let ctx = &mut self.context;
@@ -434,12 +423,11 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         post_exec.output(ctx, result)
     }
 
-    #[inline]
     pub fn deduct_caller_with_erc20(
         &mut self,
-        erc20_info: Option<Erc20FeeInfo>,
+        token_info: Option<TokenFeeInfo>,
     ) -> Result<(), EVMError<DB::Error>> {
-        let Some(erc20_info) = erc20_info else {
+        let Some(token_info) = token_info else {
             return Err(EVMError::Custom(
                 "[MORPH] Failed to calculate erc20 gas.".to_string(),
             ));
@@ -463,38 +451,37 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let gas_cost =
             U256::from(ctx.evm.env.tx.gas_limit).saturating_mul(ctx.evm.env.effective_gas_price());
         let amount = tx_l1_cost + gas_cost;
-        let erc20_amount = eth_to_erc20(amount, erc20_info.price_ratio, erc20_info.scale);
-        if erc20_amount.is_zero() {
+        let token_amount = eth_to_token(amount, token_info.price_ratio, token_info.scale);
+        if token_amount.is_zero() {
             return Err(EVMError::Custom(
                 "[MORPH] Failed to calculate erc20 gas.".to_string(),
             ));
         }
-        if erc20_amount > erc20_info.balance {
+        if token_amount > token_info.balance {
             return Err(EVMError::Custom(
                 "[MORPH] Token balance is insufficient to pay gas.".to_string(),
             ));
         }
 
-        if erc20_info.balance_slot.is_zero() {
-            let _ = self.transfer_token_evm(erc20_info, erc20_amount, true)?;
+        if token_info.balance_slot.is_zero() {
+            let _ = self.transfer_token_evm(token_info, token_amount, true)?;
         } else {
             let ctx = &mut self.context;
-            let mut acc = ctx.evm.load_account(erc20_info.token_address)?;
+            let mut acc = ctx.evm.load_account(token_info.token_address)?;
             acc.mark_touch();
             let mut acc_vault = ctx.evm.load_account(L2_FEE_VAULT)?;
             acc_vault.mark_touch();
-            transfer_token_sstore(erc20_info.clone(), erc20_amount, ctx, true)?
+            transfer_token_sstore(token_info.clone(), token_amount, ctx, true)?
         }
         Ok(())
     }
 
-    #[inline]
     pub fn reimburse_caller_with_erc20(
         &mut self,
-        erc20_info: Option<Erc20FeeInfo>,
+        token_info: Option<TokenFeeInfo>,
         gas: &Gas,
     ) -> Result<(), EVMError<DB::Error>> {
-        let Some(erc20_info) = erc20_info else {
+        let Some(token_info) = token_info else {
             return Err(EVMError::Custom(
                 "[MORPH] Failed to calculate token gas.".to_string(),
             ));
@@ -502,16 +489,16 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let ctx = &mut self.context;
         let effective_gas_price = ctx.evm.env.effective_gas_price();
         let amount = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
-        let erc20_amount = eth_to_erc20(amount, erc20_info.price_ratio, erc20_info.scale);
-        if erc20_amount.is_zero() {
+        let token_amount = eth_to_token(amount, token_info.price_ratio, token_info.scale);
+        if token_amount.is_zero() {
             return Err(EVMError::Custom(
                 "[MORPH] Failed to calculate token reimburse.".to_string(),
             ));
         }
-        if erc20_info.balance_slot.is_zero() {
-            let _ = self.transfer_token_evm(erc20_info, erc20_amount, false)?;
+        if token_info.balance_slot.is_zero() {
+            let _ = self.transfer_token_evm(token_info, token_amount, false)?;
         } else {
-            transfer_token_sstore(erc20_info.clone(), erc20_amount, ctx, false)?;
+            transfer_token_sstore(token_info.clone(), token_amount, ctx, false)?;
         }
 
         Ok(())
@@ -519,14 +506,14 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
 
     fn transfer_token_evm(
         &mut self,
-        erc20_info: Erc20FeeInfo,
+        token_info: TokenFeeInfo,
         amount: U256,
         forward: bool,
     ) -> Result<FrameResult, EVMError<DB::Error>> {
         let (from, to) = if forward {
-            (erc20_info.caller, L2_FEE_VAULT)
+            (token_info.caller, L2_FEE_VAULT)
         } else {
-            (L2_FEE_VAULT, erc20_info.caller)
+            (L2_FEE_VAULT, token_info.caller)
         };
         // Call transfer(address,uint256) method via EVM
         // Method signature: transfer(address,uint256) -> 0xa9059cbb
@@ -543,7 +530,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             caller: from,
             gas_limit: 1_000_00u64,
             gas_price: U256::ZERO,
-            transact_to: TxKind::Call(erc20_info.token_address),
+            transact_to: TxKind::Call(token_info.token_address),
             value: U256::ZERO,
             data: Bytes::from(calldata),
             nonce: None,
@@ -563,36 +550,36 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
 }
 
 fn transfer_token_sstore<EXT, DB: Database>(
-    erc20_info: Erc20FeeInfo,
+    token_info: TokenFeeInfo,
     erc20_amount: U256,
     ctx: &mut Context<EXT, DB>,
     forward: bool,
 ) -> Result<(), EVMError<DB::Error>> {
     let (from, to) = if forward {
-        (erc20_info.caller, L2_FEE_VAULT)
+        (token_info.caller, L2_FEE_VAULT)
     } else {
-        (L2_FEE_VAULT, erc20_info.caller)
+        (L2_FEE_VAULT, token_info.caller)
     };
     // sub amount
-    let balance_slot = get_mapping_account_slot(erc20_info.balance_slot, from);
+    let balance_slot = get_mapping_account_slot(token_info.balance_slot, from);
     let balance = ctx
         .evm
-        .sload(erc20_info.token_address, balance_slot)
+        .sload(token_info.token_address, balance_slot)
         .unwrap_or_default();
     ctx.evm.sstore(
-        erc20_info.token_address,
+        token_info.token_address,
         balance_slot,
         balance.saturating_sub(erc20_amount),
     )?;
 
     // add amount
-    let balance_slot = get_mapping_account_slot(erc20_info.balance_slot, to);
+    let balance_slot = get_mapping_account_slot(token_info.balance_slot, to);
     let balance = ctx
         .evm
-        .sload(erc20_info.token_address, balance_slot)
+        .sload(token_info.token_address, balance_slot)
         .unwrap_or_default();
     ctx.evm.sstore(
-        erc20_info.token_address,
+        token_info.token_address,
         balance_slot,
         balance.saturating_add(erc20_amount),
     )?;

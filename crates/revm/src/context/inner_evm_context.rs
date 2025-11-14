@@ -1,5 +1,5 @@
 #[cfg(feature = "morph")]
-use crate::morph::Erc20FeeInfo;
+use crate::morph::TokenFeeInfo;
 use crate::{
     db::Database,
     interpreter::{
@@ -37,7 +37,7 @@ pub struct InnerEvmContext<DB: Database> {
     pub l1_block_info: Option<crate::morph::L1BlockInfo>,
     /// Used as temporary value holder to store Erc20 fee info.
     #[cfg(feature = "morph")]
-    pub erc20_fee_info: Option<Erc20FeeInfo>,
+    pub erc20_fee_info: Option<TokenFeeInfo>,
 }
 
 impl<DB: Database + Clone> Clone for InnerEvmContext<DB>

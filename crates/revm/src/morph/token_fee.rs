@@ -1,19 +1,19 @@
 use crate::primitives::{address, Address, U256};
-use crate::primitives::{Bytes, TxEnv, TxKind};
+use crate::primitives::{keccak256, Bytes, TxEnv, TxKind};
 use crate::{Database, Evm};
 
 // TokenRegistry is the storage slot for mapping(uint16 => TokenInfo) - slot 0
 const TOKEN_REGISTRY_SLOT: U256 = U256::from_limbs([0u64, 0, 0, 0]);
 // PriceRatio is the storage slot for mapping(uint16 => uint256) - slot 2
 const PRICE_RATIO_SLOT: U256 = U256::from_limbs([2u64, 0, 0, 0]);
-// System address for receiving ERC20 fees
+// System address for receiving Alt Token fees
 pub const L2_FEE_VAULT: Address = address!("0e87cd091e091562F25CB1cf4641065dA2C049F5");
 // System address for L2 token registry
 pub const L2_TOKEN_REGISTRY_ADDRESS: Address = address!("5300000000000000000000000000000000000021");
 
 #[derive(Clone, Debug, Default)]
-pub struct Erc20FeeInfo {
-    /// The ERC20 token address
+pub struct TokenFeeInfo {
+    /// The fee token address
     pub token_address: Address,
     /// Whether the token is active
     pub is_active: bool,
@@ -31,13 +31,13 @@ pub struct Erc20FeeInfo {
     pub balance_slot: U256,
 }
 
-impl Erc20FeeInfo {
+impl TokenFeeInfo {
     // Get the token information for gas payment from the state db.
     pub fn try_fetch<DB: Database>(
         db: &mut DB,
         token_id: u16,
         caller: Address,
-    ) -> Result<Option<Erc20FeeInfo>, DB::Error> {
+    ) -> Result<Option<TokenFeeInfo>, DB::Error> {
         // Get the base slot for this token_id in tokenRegistry mapping
         let mut token_id_bytes = [0u8; 32];
         token_id_bytes[30..32].copy_from_slice(&token_id.to_be_bytes());
@@ -85,7 +85,7 @@ impl Erc20FeeInfo {
 
         // Get caller's token balance
         let caller_token_balance = get_erc20_balance(db, token_address, caller, token_balance_slot);
-        let erc20_fee = Erc20FeeInfo {
+        let token_fee = TokenFeeInfo {
             token_address,
             is_active,
             decimals,
@@ -96,7 +96,7 @@ impl Erc20FeeInfo {
             balance_slot: token_balance_slot,
         };
 
-        Ok(Some(erc20_fee))
+        Ok(Some(token_fee))
     }
 }
 
@@ -104,11 +104,12 @@ impl Erc20FeeInfo {
 fn get_mapping_slot(slot_index: U256, mut key: Vec<u8>) -> U256 {
     let mut pre_image = slot_index.to_be_bytes_vec();
     key.append(&mut pre_image);
-    let storage_key = crate::primitives::keccak256(key);
+    let storage_key = keccak256(key);
     U256::from_be_bytes(storage_key.0)
 }
 
 /// Calculate the account's storage slot for a mapping value
+#[inline]
 pub fn get_mapping_account_slot(slot_index: U256, account: Address) -> U256 {
     let mut key = [0u8; 32];
     key[12..32].copy_from_slice(account.as_slice());

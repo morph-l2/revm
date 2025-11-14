@@ -1,8 +1,8 @@
-pub mod erc20_fee;
+pub mod token_fee;
 mod handler_register;
 mod l1block;
 
-pub use crate::morph::erc20_fee::{Erc20FeeInfo, get_mapping_account_slot};
+pub use crate::morph::token_fee::{TokenFeeInfo, get_mapping_account_slot};
 pub use crate::morph::handler_register::{
     deduct_caller, load_accounts, morph_handle_register, reward_beneficiary,
 };
