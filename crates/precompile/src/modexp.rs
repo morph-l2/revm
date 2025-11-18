@@ -18,11 +18,19 @@ pub const BYZANTIUM: PrecompileWithAddress = PrecompileWithAddress(
 pub const BERLIN: PrecompileWithAddress =
     PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(berlin_run));
 
+/// `modexp` precompile with OSAKA gas rules.
+pub const OSAKA: PrecompileWithAddress =
+    PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(osaka_run));
+
 #[cfg(feature = "morph")]
 pub const BERNOULLI: PrecompileWithAddress = PrecompileWithAddress(
     crate::u64_to_address(5),
     Precompile::Standard(bernoilli_run),
 );
+
+#[cfg(feature = "morph")]
+pub const OSAKA: PrecompileWithAddress =
+    PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(osaka_run));
 
 /// See: <https://eips.ethereum.org/EIPS/eip-198>
 /// See: <https://etherscan.io/address/0000000000000000000000000000000000000005>
@@ -35,6 +43,14 @@ pub fn byzantium_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
 pub fn berlin_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     run_inner(input, gas_limit, 200, |a, b, c, d| {
         berlin_gas_calc(a, b, c, d)
+    })
+}
+
+/// See: <https://eips.ethereum.org/EIPS/eip-7823>
+/// Gas cost of berlin is modified from byzantium.
+pub fn osaka_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
+    run_inner(input, gas_limit, 500, |a, b, c, d| {
+        osaka_gas_calc(a, b, c, d)
     })
 }
 
@@ -60,7 +76,31 @@ pub fn bernoilli_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     })
 }
 
-pub fn calculate_iteration_count(exp_length: u64, exp_highp: &U256) -> u64 {
+#[cfg(feature = "morph")]
+/// See: <https://eips.ethereum.org/EIPS/eip-7823>
+/// Gas cost of berlin is modified from byzantium.
+pub fn osaka_run(input: &[u8], gas_limit: u64) -> PrecompileResult {
+    let base_len = U256::from_be_bytes(right_pad_with_offset::<32>(input, 0).into_owned());
+    let exp_len = U256::from_be_bytes(right_pad_with_offset::<32>(input, 32).into_owned());
+    let mod_len = U256::from_be_bytes(right_pad_with_offset::<32>(input, 64).into_owned());
+
+    // modexp temporarily only accepts inputs of 32 bytes (256 bits) or less
+    if base_len > MORPH_LEN_LIMIT {
+        return Err(Error::ModexpBaseOverflow.into());
+    }
+    if exp_len > MORPH_LEN_LIMIT {
+        return Err(Error::ModexpExpOverflow.into());
+    }
+    if mod_len > MORPH_LEN_LIMIT {
+        return Err(Error::ModexpModOverflow.into());
+    }
+    run_inner::<_, true>(input, gas_limit, 500, |a, b, c, d| {
+        osaka_gas_calc(a, b, c, d)
+    })
+}
+
+/// Calculate the iteration count for the modexp precompile.
+pub fn calculate_iteration_count<const MULTIPLIER: u64>(exp_length: u64, exp_highp: &U256) -> u64 {
     let mut iteration_count: u64 = 0;
 
     if exp_length <= 32 && exp_highp.is_zero() {
@@ -68,7 +108,7 @@ pub fn calculate_iteration_count(exp_length: u64, exp_highp: &U256) -> u64 {
     } else if exp_length <= 32 {
         iteration_count = exp_highp.bit_len() as u64 - 1;
     } else if exp_length > 32 {
-        iteration_count = (8u64.saturating_mul(exp_length - 32))
+        iteration_count = (MULTIPLIER.saturating_mul(exp_length - 32))
             .saturating_add(max(1, exp_highp.bit_len() as u64) - 1);
     }
 
@@ -150,50 +190,65 @@ where
     ))
 }
 
+/// Calculate the gas cost for the modexp precompile with BYZANTIUM gas rules.
 pub fn byzantium_gas_calc(base_len: u64, exp_len: u64, mod_len: u64, exp_highp: &U256) -> u64 {
-    // output of this function is bounded by 2^128
-    fn mul_complexity(x: u64) -> U256 {
-        if x <= 64 {
-            U256::from(x * x)
-        } else if x <= 1_024 {
-            U256::from(x * x / 4 + 96 * x - 3_072)
+    gas_calc::<0, 8, 20, _>(base_len, exp_len, mod_len, exp_highp, |max_len| -> U256 {
+        // Output of this function is bounded by 2^128
+        if max_len <= 64 {
+            U256::from(max_len * max_len)
+        } else if max_len <= 1_024 {
+            U256::from(max_len * max_len / 4 + 96 * max_len - 3_072)
         } else {
-            // up-cast to avoid overflow
-            let x = U256::from(x);
+            // Up-cast to avoid overflow
+            let x = U256::from(max_len);
             let x_sq = x * x; // x < 2^64 => x*x < 2^128 < 2^256 (no overflow)
             x_sq / U256::from(16) + U256::from(480) * x - U256::from(199_680)
         }
-    }
-
-    let mul = mul_complexity(core::cmp::max(mod_len, base_len));
-    let iter_count = U256::from(calculate_iteration_count(exp_len, exp_highp));
-    // mul * iter_count bounded by 2^195 < 2^256 (no overflow)
-    let gas = (mul * iter_count) / U256::from(20);
-    gas.saturating_to()
+    })
 }
 
 // Calculate gas cost according to EIP 2565:
 // https://eips.ethereum.org/EIPS/eip-2565
-pub fn berlin_gas_calc(
-    base_length: u64,
-    exp_length: u64,
-    mod_length: u64,
-    exp_highp: &U256,
-) -> u64 {
-    fn calculate_multiplication_complexity(base_length: u64, mod_length: u64) -> U256 {
-        let max_length = max(base_length, mod_length);
-        let mut words = max_length / 8;
-        if max_length % 8 > 0 {
-            words += 1;
-        }
-        let words = U256::from(words);
+pub fn berlin_gas_calc(base_len: u64, exp_len: u64, mod_len: u64, exp_highp: &U256) -> u64 {
+    gas_calc::<200, 8, 3, _>(base_len, exp_len, mod_len, exp_highp, |max_len| -> U256 {
+        let words = U256::from(max_len.div_ceil(8));
         words * words
-    }
+    })
+}
 
-    let multiplication_complexity = calculate_multiplication_complexity(base_length, mod_length);
-    let iteration_count = calculate_iteration_count(exp_length, exp_highp);
-    let gas = (multiplication_complexity * U256::from(iteration_count)) / U256::from(3);
-    max(200, gas.saturating_to())
+/// Calculate gas cost according to EIP-7883:
+/// <https://eips.ethereum.org/EIPS/eip-7883>
+///
+/// There are three changes:
+/// 1. Increase minimal price from 200 to 500
+/// 2. Increase cost when exponent is larger than 32 bytes
+/// 3. Increase cost when base or modulus is larger than 32 bytes
+pub fn osaka_gas_calc(base_len: u64, exp_len: u64, mod_len: u64, exp_highp: &U256) -> u64 {
+    gas_calc::<500, 16, 1, _>(base_len, exp_len, mod_len, exp_highp, |max_len| -> U256 {
+        if max_len <= 32 {
+            return U256::from(16); // multiplication_complexity = 16
+        }
+
+        let words = U256::from(max_len.div_ceil(8));
+        words * words * U256::from(2) // multiplication_complexity = 2 * words**2
+    })
+}
+
+/// Calculate gas cost.
+pub fn gas_calc<const MIN_PRICE: u64, const MULTIPLIER: u64, const GAS_DIVISOR: u64, F>(
+    base_len: u64,
+    exp_len: u64,
+    mod_len: u64,
+    exp_highp: &U256,
+    calculate_multiplication_complexity: F,
+) -> u64
+where
+    F: Fn(u64) -> U256,
+{
+    let multiplication_complexity = calculate_multiplication_complexity(max(base_len, mod_len));
+    let iteration_count = calculate_iteration_count::<MULTIPLIER>(exp_len, exp_highp);
+    let gas = (multiplication_complexity * U256::from(iteration_count)) / U256::from(GAS_DIVISOR);
+    max(MIN_PRICE, gas.saturating_to())
 }
 
 #[cfg(test)]

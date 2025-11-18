@@ -18,6 +18,16 @@ pub fn gt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     *op2 = U256::from(op1 > *op2);
 }
 
+/// Implements the CLZ instruction - count leading zeros.
+pub fn clz<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
+    // check!(interpreter, OSAKA);
+    // gas!(interpreter, gas::LOW);
+    pop_top!(interpreter, op1);
+
+    let leading_zeros = op1.leading_zeros();
+    *op1 = U256::from(leading_zeros);
+}
+
 pub fn slt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
@@ -123,9 +133,9 @@ pub fn sar<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
 
 #[cfg(test)]
 mod tests {
-    use crate::instructions::bitwise::{byte, sar, shl, shr};
+    use crate::instructions::bitwise::{byte, clz, sar, shl, shr};
     use crate::{Contract, DummyHost, Interpreter};
-    use revm_primitives::{uint, Env, LatestSpec, U256};
+    use revm_primitives::{uint, Env, LatestSpec, SpecId, U256};
 
     #[test]
     fn test_shift_left() {
@@ -427,6 +437,58 @@ mod tests {
             byte(&mut interpreter, &mut host);
             pop!(interpreter, res);
             assert_eq!(res, test.expected, "Failed at index: {}", test.index);
+        }
+    }
+
+    #[test]
+    fn test_clz() {
+        let mut host = DummyHost::new(Env::default());
+        let mut interpreter = Interpreter::default();
+        struct TestCase {
+            value: U256,
+            expected: U256,
+        }
+
+        uint! {
+            let test_cases = [
+                TestCase { value: 0x0_U256, expected: 256_U256 },
+                TestCase { value: 0x1_U256, expected: 255_U256 },
+                TestCase { value: 0x2_U256, expected: 254_U256 },
+                TestCase { value: 0x3_U256, expected: 254_U256 },
+                TestCase { value: 0x4_U256, expected: 253_U256 },
+                TestCase { value: 0x7_U256, expected: 253_U256 },
+                TestCase { value: 0x8_U256, expected: 252_U256 },
+                TestCase { value: 0xff_U256, expected: 248_U256 },
+                TestCase { value: 0x100_U256, expected: 247_U256 },
+                TestCase { value: 0xffff_U256, expected: 240_U256 },
+                TestCase {
+                    value: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff_U256, // U256::MAX
+                    expected: 0_U256,
+                },
+                TestCase {
+                    value: 0x8000000000000000000000000000000000000000000000000000000000000000_U256, // 1 << 255
+                    expected: 0_U256,
+                },
+                TestCase { // Smallest value with 1 leading zero
+                    value: 0x4000000000000000000000000000000000000000000000000000000000000000_U256, // 1 << 254
+                    expected: 1_U256,
+                },
+                TestCase { // Value just below 1 << 255
+                    value: 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff_U256,
+                    expected: 1_U256,
+                },
+            ];
+        }
+
+        for test in test_cases {
+            push!(interpreter, test.value);
+            clz(&mut interpreter, &mut host);
+            let res = interpreter.stack.pop().unwrap();
+            assert_eq!(
+                res, test.expected,
+                "CLZ for value {:#x} failed. Expected: {}, Got: {}",
+                test.value, test.expected, res
+            );
         }
     }
 }

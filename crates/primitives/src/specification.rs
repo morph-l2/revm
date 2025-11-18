@@ -30,6 +30,7 @@ pub enum SpecId {
     CANCUN = 17,          // Cancun                 19426587 (Timestamp: 1710338135)
     PRAGUE = 18,          // Prague                 TBD
     PRAGUE_EOF = 19,      // Prague+EOF             TBD
+    OSAKA = 20,           // Osaka
     #[default]
     LATEST = u8::MAX,
 }
@@ -112,9 +113,10 @@ pub enum SpecId {
     CURIE = 19,
     MORPH203 = 20, // revert Precompiles: RIPEMD-160, point evaluation, modexp, ecPairing
     VIRIDIAN = 21, // Support EIP-7702
-    CANCUN = 22,
-    PRAGUE = 23,
-    PRAGUE_EOF = 24,
+    EMERALD = 22,  // EMERALD upgrade
+    CANCUN = 23,
+    PRAGUE = 24,
+    PRAGUE_EOF = 25,
     #[default]
     LATEST = u8::MAX,
 }
@@ -180,6 +182,8 @@ impl From<&str> for SpecId {
             "Morph203" => SpecId::MORPH203,
             #[cfg(feature = "morph")]
             "Viridian" => SpecId::VIRIDIAN,
+            #[cfg(feature = "morph")]
+            "Emerald" => SpecId::EMERALD,
             _ => Self::LATEST,
         }
     }
@@ -208,6 +212,7 @@ impl From<SpecId> for &'static str {
             SpecId::CANCUN => "Cancun",
             SpecId::PRAGUE => "Prague",
             SpecId::PRAGUE_EOF => "PragueEOF",
+            SpecId::OSAKA => "Osaka",
             #[cfg(feature = "optimism")]
             SpecId::BEDROCK => "Bedrock",
             #[cfg(feature = "optimism")]
@@ -230,6 +235,8 @@ impl From<SpecId> for &'static str {
             SpecId::MORPH203 => "Morph203",
             #[cfg(feature = "morph")]
             SpecId::VIRIDIAN => "Viridian",
+            #[cfg(feature = "morph")]
+            SpecId::EMERALD => "Emerald",
             SpecId::LATEST => "Latest",
         }
     }
@@ -305,6 +312,8 @@ spec!(MORPH203, Morph203Spec);
 spec!(CURIE, CurieSpec);
 #[cfg(feature = "morph")]
 spec!(VIRIDIAN, ViridianSpec);
+#[cfg(feature = "morph")]
+spec!(EMERALD, EmeraldSpec);
 
 #[cfg(not(any(feature = "optimism", feature = "morph")))]
 #[macro_export]
@@ -560,6 +569,10 @@ macro_rules! spec_to_generic {
                 use $crate::CurieSpec as SPEC;
                 $e
             }
+            $crate::SpecId::EMERALD => {
+                use $crate::EmeraldSpec as SPEC;
+                $e
+            }
         }
     }};
 }
@@ -605,6 +618,8 @@ mod tests {
         spec_to_generic!(CURIE, assert_eq!(SPEC::SPEC_ID, CURIE));
         #[cfg(feature = "morph")]
         spec_to_generic!(VIRIDIAN, assert_eq!(SPEC::SPEC_ID, VIRIDIAN));
+        #[cfg(feature = "morph")]
+        spec_to_generic!(EMERALD, assert_eq!(SPEC::SPEC_ID, EMERALD));
         spec_to_generic!(CANCUN, assert_eq!(SPEC::SPEC_ID, CANCUN));
         #[cfg(feature = "optimism")]
         spec_to_generic!(ECOTONE, assert_eq!(SPEC::SPEC_ID, ECOTONE));
