@@ -293,7 +293,7 @@ impl Env {
                 fee_limit = token_info.0
             }
             let token_check = eth_to_token(gas_cost, token_info.1, token_info.2);
-            token_check > fee_limit || self.tx.value > account.info.balance
+            token_check.is_zero() || token_check > fee_limit || self.tx.value > account.info.balance
         } else {
             balance_check > account.info.balance
         };

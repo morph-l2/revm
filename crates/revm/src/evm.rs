@@ -1,5 +1,3 @@
-use revm_interpreter::Gas;
-
 use crate::{
     builder::{EvmBuilder, HandlerStage, SetGenericStage},
     db::{Database, DatabaseCommit, EmptyDB},
@@ -7,7 +5,7 @@ use crate::{
     interpreter::{
         CallInputs, CreateInputs, EOFCreateInputs, Host, InterpreterAction, SharedMemory,
     },
-    morph::{get_mapping_account_slot, token_fee::L2_FEE_VAULT, TokenFeeInfo},
+    morph::{get_mapping_account_slot, TokenFeeInfo},
     primitives::{
         eth_to_token, specification::SpecId, BlockEnv, Bytes, CfgEnv, EVMError, EVMResult,
         EnvWithHandlerCfg, ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind,
@@ -16,6 +14,7 @@ use crate::{
     Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult,
 };
 use core::fmt;
+use revm_interpreter::Gas;
 use std::{boxed::Box, vec::Vec};
 
 /// EVM call stack limit.
@@ -235,10 +234,10 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let fee_token_id = context.evm.inner.env().tx.fee_token_id.unwrap_or_default();
         if fee_token_id != 0 {
             let caller = context.evm.inner.env.tx.caller;
-            let erc20_fee_info =
+            let token_fee_info =
                 TokenFeeInfo::try_fetch(&mut context.evm.inner.db, fee_token_id, caller)
                     .map_err(EVMError::Database)?;
-            context.evm.inner.erc20_fee_info = erc20_fee_info;
+            context.evm.inner.token_fee_info = token_fee_info;
         }
         let initial_gas_spend = self.preverify_transaction_inner().inspect_err(|_| {
             self.clear();
@@ -347,9 +346,9 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         ctx.evm.set_precompiles(precompiles);
 
         // deduce caller balance with its limit.
-        let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
+        let token_fee_info = ctx.evm.inner.token_fee_info.clone();
         if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
-            self.deduct_caller_with_erc20(erc20_fee_info)?;
+            self.deduct_caller_with_erc20(token_fee_info)?;
         } else {
             self.handler.pre_execution().deduct_caller(ctx)?;
         }
@@ -405,9 +404,9 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // Reimburse the caller
 
         let ctx = &mut self.context;
-        let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
+        let token_fee_info = ctx.evm.inner.token_fee_info.clone();
         if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
-            self.reimburse_caller_with_erc20(erc20_fee_info, result.gas())?;
+            self.reimburse_caller_with_erc20(token_fee_info, result.gas())?;
         } else {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
@@ -415,8 +414,8 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let ctx = &mut self.context;
         let post_exec = self.handler.post_execution();
         // Reward beneficiary
-        let erc20_fee_info = ctx.evm.inner.erc20_fee_info.clone();
-        if erc20_fee_info.is_none() {
+        let token_fee_info = ctx.evm.inner.token_fee_info.clone();
+        if token_fee_info.is_none() {
             post_exec.reward_beneficiary(ctx, result.gas())?;
         }
         // Returns output of transaction.
@@ -469,10 +468,22 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             let ctx = &mut self.context;
             let mut acc = ctx.evm.load_account(token_info.token_address)?;
             acc.mark_touch();
-            let mut acc_vault = ctx.evm.load_account(L2_FEE_VAULT)?;
-            acc_vault.mark_touch();
             transfer_token_sstore(token_info.clone(), token_amount, ctx, true)?
         }
+
+        let ctx = &mut self.context;
+        let mut caller_account = ctx
+            .evm
+            .inner
+            .journaled_state
+            .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
+
+        if matches!(ctx.evm.inner.env.tx.transact_to, TxKind::Call(_)) {
+            // Nonce is already checked
+            caller_account.data.info.nonce = caller_account.data.info.nonce.saturating_add(1);
+        }
+        caller_account.mark_touch();
+
         Ok(())
     }
 
@@ -489,6 +500,9 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let ctx = &mut self.context;
         let effective_gas_price = ctx.evm.env.effective_gas_price();
         let amount = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
+        if amount.is_zero() {
+            return Ok(());
+        }
         let token_amount = eth_to_token(amount, token_info.price_ratio, token_info.scale);
         if token_amount.is_zero() {
             return Err(EVMError::Custom(
@@ -510,10 +524,11 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         amount: U256,
         forward: bool,
     ) -> Result<FrameResult, EVMError<DB::Error>> {
+        let l2_fee_vault = self.context.env().block.coinbase;
         let (from, to) = if forward {
-            (token_info.caller, L2_FEE_VAULT)
+            (token_info.caller, l2_fee_vault)
         } else {
-            (L2_FEE_VAULT, token_info.caller)
+            (l2_fee_vault, token_info.caller)
         };
         // Call transfer(address,uint256) method via EVM
         // Method signature: transfer(address,uint256) -> 0xa9059cbb
@@ -555,10 +570,11 @@ fn transfer_token_sstore<EXT, DB: Database>(
     ctx: &mut Context<EXT, DB>,
     forward: bool,
 ) -> Result<(), EVMError<DB::Error>> {
+    let l2_fee_vault = ctx.env().block.coinbase;
     let (from, to) = if forward {
-        (token_info.caller, L2_FEE_VAULT)
+        (token_info.caller, l2_fee_vault)
     } else {
-        (L2_FEE_VAULT, token_info.caller)
+        (l2_fee_vault, token_info.caller)
     };
     // sub amount
     let balance_slot = get_mapping_account_slot(token_info.balance_slot, from);
