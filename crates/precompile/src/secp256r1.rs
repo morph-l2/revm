@@ -26,8 +26,10 @@ pub const P256VERIFY: PrecompileWithAddress =
     PrecompileWithAddress(u64_to_address(0x100), Precompile::Standard(p256_verify));
 
 /// [RIP-7212](https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md#specification) secp256r1 precompile.
-pub const P256VERIFY_OSAKA: PrecompileWithAddress =
-    PrecompileWithAddress(u64_to_address(0x100), Precompile::Standard(p256_verify_osaka));
+pub const P256VERIFY_OSAKA: PrecompileWithAddress = PrecompileWithAddress(
+    u64_to_address(0x100),
+    Precompile::Standard(p256_verify_osaka),
+);
 
 /// secp256r1 precompile logic. It takes the input bytes sent to the precompile
 /// and the gas limit. The output represents the result of verifying the
@@ -55,7 +57,7 @@ pub fn p256_verify_osaka(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     p256_verify_inner(input, gas_limit, P256VERIFY_BASE_GAS_FEE_OSAKA)
 }
 
-fn p256_verify_inner(input:&Bytes, gas_limit: u64, gas_cost: u64) -> PrecompileResult {
+fn p256_verify_inner(input: &Bytes, gas_limit: u64, gas_cost: u64) -> PrecompileResult {
     if gas_cost > gas_limit {
         return Err(PrecompileError::OutOfGas.into());
     }

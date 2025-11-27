@@ -201,9 +201,7 @@ impl Precompiles {
             ]);
 
             #[cfg(feature = "secp256r1")]
-            precompiles.extend([
-                secp256r1::P256VERIFY_OSAKA,
-            ]);
+            precompiles.extend([secp256r1::P256VERIFY_OSAKA]);
 
             Box::new(precompiles)
         })
@@ -280,9 +278,7 @@ impl Precompiles {
                 modexp::OSAKA, // 0x05
             ]);
             #[cfg(feature = "secp256r1")]
-            precompiles.extend([
-                secp256r1::P256VERIFY_OSAKA,
-            ]);
+            precompiles.extend([secp256r1::P256VERIFY_OSAKA]);
             Box::new(precompiles)
         })
     }
