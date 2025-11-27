@@ -72,6 +72,7 @@ impl Precompiles {
             PrecompileSpecId::EMERALD => Self::emerald(),
             PrecompileSpecId::CANCUN => Self::cancun(),
             PrecompileSpecId::PRAGUE => Self::prague(),
+            PrecompileSpecId::OSAKA => Self::osaka(),
             PrecompileSpecId::LATEST => Self::latest(),
         }
     }
@@ -189,6 +190,25 @@ impl Precompiles {
         })
     }
 
+    /// Returns precompiles for Osaka spec.
+    pub fn osaka() -> &'static Self {
+        static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+        INSTANCE.get_or_init(|| {
+            let mut precompiles = Self::prague().clone();
+
+            precompiles.extend([
+                modexp::OSAKA, // 0x05
+            ]);
+
+            #[cfg(feature = "secp256r1")]
+            precompiles.extend([
+                secp256r1::P256VERIFY_OSAKA,
+            ]);
+
+            Box::new(precompiles)
+        })
+    }
+
     /// Returns precompiles for Morph
     #[cfg(feature = "morph")]
     pub fn pre_bernoulli() -> &'static Self {
@@ -254,10 +274,13 @@ impl Precompiles {
     pub fn emerald() -> &'static Self {
         static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
         INSTANCE.get_or_init(|| {
-            let precompiles = Self::viridian().clone();
+            let mut precompiles = Self::viridian().clone();
             precompiles.extend(bls12_381::precompiles()); // add BLS12-381 precompiles
             precompiles.extend([
                 modexp::OSAKA, // 0x05
+            ]);
+            #[cfg(feature = "secp256r1")]
+            precompiles.extend([
                 secp256r1::P256VERIFY_OSAKA,
             ]);
             Box::new(precompiles)
@@ -373,6 +396,7 @@ pub enum PrecompileSpecId {
     EMERALD,
     CANCUN,
     PRAGUE,
+    OSAKA,
     LATEST,
 }
 
@@ -389,6 +413,7 @@ impl PrecompileSpecId {
             BERLIN | LONDON | ARROW_GLACIER | GRAY_GLACIER | MERGE | SHANGHAI => Self::BERLIN,
             CANCUN => Self::CANCUN,
             PRAGUE | PRAGUE_EOF => Self::PRAGUE,
+            OSAKA => Self::OSAKA,
             LATEST => Self::LATEST,
             #[cfg(feature = "optimism")]
             BEDROCK | REGOLITH | CANYON => Self::BERLIN,

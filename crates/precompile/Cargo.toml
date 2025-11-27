@@ -100,6 +100,7 @@ morph = ["revm-primitives/morph"]
 # Morph default handler enabled Morph handler register by default in EvmBuilder.
 morph-default-handler = [
     "morph",
+    "secp256r1"
     "revm-primitives/morph-default-handler",
 ]
 negate-morph-default-handler = [

@@ -160,6 +160,7 @@ impl From<&str> for SpecId {
             "Cancun" => Self::CANCUN,
             "Prague" => Self::PRAGUE,
             "PragueEOF" => Self::PRAGUE_EOF,
+            "Osaka" => Self::OSAKA,
             #[cfg(feature = "optimism")]
             "Bedrock" => SpecId::BEDROCK,
             #[cfg(feature = "optimism")]
@@ -284,6 +285,7 @@ spec!(SHANGHAI, ShanghaiSpec);
 spec!(CANCUN, CancunSpec);
 spec!(PRAGUE, PragueSpec);
 spec!(PRAGUE_EOF, PragueEofSpec);
+spec!(OSAKA, OsakaSpec);
 
 spec!(LATEST, LatestSpec);
 
@@ -380,6 +382,10 @@ macro_rules! spec_to_generic {
             }
             $crate::SpecId::PRAGUE_EOF => {
                 use $crate::PragueEofSpec as SPEC;
+                $e
+            }
+            $crate::SpecId::OSAKA => {
+                use $crate::OsakaSpec as SPEC;
                 $e
             }
         }
