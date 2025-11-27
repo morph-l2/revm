@@ -117,6 +117,7 @@ pub enum SpecId {
     CANCUN = 23,
     PRAGUE = 24,
     PRAGUE_EOF = 25,
+    OSAKA = 26,
     #[default]
     LATEST = u8::MAX,
 }
