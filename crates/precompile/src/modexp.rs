@@ -29,8 +29,8 @@ pub const BERNOULLI: PrecompileWithAddress = PrecompileWithAddress(
 );
 
 #[cfg(feature = "morph")]
-pub const OSAKA: PrecompileWithAddress =
-    PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(osaka_run));
+pub const EMERALD: PrecompileWithAddress =
+    PrecompileWithAddress(crate::u64_to_address(5), Precompile::Standard(emerald_run));
 
 /// See: <https://eips.ethereum.org/EIPS/eip-198>
 /// See: <https://etherscan.io/address/0000000000000000000000000000000000000005>
@@ -79,7 +79,7 @@ pub fn bernoilli_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
 #[cfg(feature = "morph")]
 /// See: <https://eips.ethereum.org/EIPS/eip-7823>
 /// Gas cost of berlin is modified from byzantium.
-pub fn osaka_run(input: &[u8], gas_limit: u64) -> PrecompileResult {
+pub fn emerald_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     let base_len = U256::from_be_bytes(right_pad_with_offset::<32>(input, 0).into_owned());
     let exp_len = U256::from_be_bytes(right_pad_with_offset::<32>(input, 32).into_owned());
     let mod_len = U256::from_be_bytes(right_pad_with_offset::<32>(input, 64).into_owned());
@@ -94,7 +94,8 @@ pub fn osaka_run(input: &[u8], gas_limit: u64) -> PrecompileResult {
     if mod_len > MORPH_LEN_LIMIT {
         return Err(Error::ModexpModOverflow.into());
     }
-    run_inner::<_, true>(input, gas_limit, 500, |a, b, c, d| {
+
+    run_inner(input, gas_limit, 500, |a, b, c, d| {
         osaka_gas_calc(a, b, c, d)
     })
 }

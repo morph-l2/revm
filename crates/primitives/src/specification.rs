@@ -30,7 +30,6 @@ pub enum SpecId {
     CANCUN = 17,          // Cancun                 19426587 (Timestamp: 1710338135)
     PRAGUE = 18,          // Prague                 TBD
     PRAGUE_EOF = 19,      // Prague+EOF             TBD
-    OSAKA = 20,           // Osaka
     #[default]
     LATEST = u8::MAX,
 }
@@ -117,7 +116,6 @@ pub enum SpecId {
     CANCUN = 23,
     PRAGUE = 24,
     PRAGUE_EOF = 25,
-    OSAKA = 26,
     #[default]
     LATEST = u8::MAX,
 }
@@ -161,7 +159,6 @@ impl From<&str> for SpecId {
             "Cancun" => Self::CANCUN,
             "Prague" => Self::PRAGUE,
             "PragueEOF" => Self::PRAGUE_EOF,
-            "Osaka" => Self::OSAKA,
             #[cfg(feature = "optimism")]
             "Bedrock" => SpecId::BEDROCK,
             #[cfg(feature = "optimism")]
@@ -214,7 +211,6 @@ impl From<SpecId> for &'static str {
             SpecId::CANCUN => "Cancun",
             SpecId::PRAGUE => "Prague",
             SpecId::PRAGUE_EOF => "PragueEOF",
-            SpecId::OSAKA => "Osaka",
             #[cfg(feature = "optimism")]
             SpecId::BEDROCK => "Bedrock",
             #[cfg(feature = "optimism")]
@@ -286,7 +282,6 @@ spec!(SHANGHAI, ShanghaiSpec);
 spec!(CANCUN, CancunSpec);
 spec!(PRAGUE, PragueSpec);
 spec!(PRAGUE_EOF, PragueEofSpec);
-spec!(OSAKA, OsakaSpec);
 
 spec!(LATEST, LatestSpec);
 
@@ -383,10 +378,6 @@ macro_rules! spec_to_generic {
             }
             $crate::SpecId::PRAGUE_EOF => {
                 use $crate::PragueEofSpec as SPEC;
-                $e
-            }
-            $crate::SpecId::OSAKA => {
-                use $crate::OsakaSpec as SPEC;
                 $e
             }
         }
