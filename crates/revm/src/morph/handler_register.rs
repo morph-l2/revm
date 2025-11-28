@@ -1,5 +1,4 @@
 //! Handler related to Morph chain
-
 use crate::handler::mainnet;
 use crate::handler::mainnet::deduct_caller_inner;
 use crate::{
@@ -34,7 +33,6 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
         crate::morph::L1BlockInfo::try_fetch(&mut context.evm.inner.db, SPEC::SPEC_ID)
             .map_err(EVMError::Database)?;
     context.evm.inner.l1_block_info = Some(l1_block_info);
-
     mainnet::load_accounts::<SPEC, EXT, DB>(context)
 }
 

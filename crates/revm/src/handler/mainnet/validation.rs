@@ -1,3 +1,4 @@
+use crate::primitives::U256;
 use revm_interpreter::gas;
 
 use crate::{
@@ -25,11 +26,24 @@ pub fn validate_tx_against_state<SPEC: Spec, EXT, DB: Database>(
         .journaled_state
         .load_code(tx_caller, &mut context.evm.inner.db)?;
 
+    if context.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0
+        && context.evm.inner.token_fee_info.is_none()
+    {
+        return Err(EVMError::Custom(
+            "[MORPH] Failed to load token_fee_info.".to_string(),
+        ));
+    }
+
+    let token_fee_info = match &context.evm.inner.token_fee_info {
+        Some(fee_info) => (fee_info.balance, fee_info.price_ratio, fee_info.scale),
+        None => (U256::ZERO, U256::ZERO, U256::ZERO),
+    };
+
     context
         .evm
         .inner
         .env
-        .validate_tx_against_state::<SPEC>(caller_account.data)
+        .validate_tx_against_state::<SPEC>(caller_account.data, token_fee_info)
         .map_err(EVMError::Transaction)?;
 
     Ok(())

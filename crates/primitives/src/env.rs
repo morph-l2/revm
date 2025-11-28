@@ -241,6 +241,7 @@ impl Env {
     pub fn validate_tx_against_state<SPEC: Spec>(
         &self,
         account: &mut Account,
+        token_info: (U256, U256, U256),
     ) -> Result<(), InvalidTransaction> {
         // EIP-3607: Reject transactions from senders with deployed code
         // This EIP is introduced after london but there was no collision in past
@@ -268,9 +269,12 @@ impl Env {
             }
         }
 
-        let mut balance_check = U256::from(self.tx.gas_limit)
+        let gas_cost = U256::from(self.tx.gas_limit)
             .checked_mul(self.tx.gas_price)
-            .and_then(|gas_cost| gas_cost.checked_add(self.tx.value))
+            .ok_or(InvalidTransaction::OverflowPaymentInTransaction)?;
+
+        let mut balance_check = gas_cost
+            .checked_add(self.tx.value)
             .ok_or(InvalidTransaction::OverflowPaymentInTransaction)?;
 
         if SPEC::enabled(SpecId::CANCUN) {
@@ -283,7 +287,17 @@ impl Env {
 
         // Check if account has enough balance for gas_limit*gas_price and value transfer.
         // Transfer will be done inside `*_inner` functions.
-        if balance_check > account.info.balance {
+        let lack_of_fund_for_max_fee = if self.tx.fee_token_id.unwrap_or_default() != 0 {
+            let mut fee_limit = U256::from(self.tx.fee_limit.unwrap_or_default());
+            if fee_limit.is_zero() || fee_limit > token_info.0 {
+                fee_limit = token_info.0
+            }
+            let token_check = eth_to_token(gas_cost, token_info.1, token_info.2);
+            token_check.is_zero() || token_check > fee_limit || self.tx.value > account.info.balance
+        } else {
+            balance_check > account.info.balance
+        };
+        if lack_of_fund_for_max_fee {
             cfg_if::cfg_if! {
                 if #[cfg(not(feature = "morph"))] {
                     if self.cfg.is_balance_check_disabled() {
@@ -635,6 +649,13 @@ pub struct TxEnv {
     #[cfg(feature = "morph")]
     /// Morph fields
     pub morph: MorphFields,
+
+    #[cfg(feature = "morph")]
+    /// For AltFeeType
+    pub fee_token_id: Option<u16>,
+    #[cfg(feature = "morph")]
+    /// For AltFeeType
+    pub fee_limit: Option<u64>,
 }
 
 pub enum TxType {
@@ -680,6 +701,8 @@ impl Default for TxEnv {
             optimism: OptimismFields::default(),
             #[cfg(feature = "morph")]
             morph: MorphFields::default(),
+            fee_token_id: None,
+            fee_limit: None,
         }
     }
 }
@@ -779,6 +802,21 @@ pub enum AnalysisKind {
     /// Perform bytecode analysis.
     #[default]
     Analyse,
+}
+
+pub fn eth_to_token(eth_amount: U256, rate: U256, token_scale: U256) -> U256 {
+    if rate.is_zero() {
+        return U256::ZERO;
+    }
+    // EthToToken token_amount = ethAmount / (tokenRate / tokenScale) = ethAmount * tokenScale / tokenRate
+    // Calculate: (eth_amount * token_scale) / rate
+    let (token_amount, remainder) = eth_amount.saturating_mul(token_scale).div_rem(rate);
+    // If there's a remainder, round up by adding 1
+    if !remainder.is_zero() {
+        token_amount.saturating_add(U256::from(1))
+    } else {
+        token_amount
+    }
 }
 
 #[cfg(test)]
