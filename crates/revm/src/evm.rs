@@ -348,7 +348,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // deduce caller balance with its limit.
         let token_fee_info = ctx.evm.inner.token_fee_info.clone();
         if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
-            self.deduct_caller_with_erc20(token_fee_info)?;
+            self.deduct_caller_with_token(token_fee_info)?;
         } else {
             self.handler.pre_execution().deduct_caller(ctx)?;
         }
@@ -406,7 +406,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let ctx = &mut self.context;
         let token_fee_info = ctx.evm.inner.token_fee_info.clone();
         if ctx.evm.inner.env.tx.fee_token_id.unwrap_or_default() != 0 {
-            self.reimburse_caller_with_erc20(token_fee_info, result.gas())?;
+            self.reimburse_caller_with_token(token_fee_info, result.gas())?;
         } else {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
@@ -422,13 +422,13 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         post_exec.output(ctx, result)
     }
 
-    pub fn deduct_caller_with_erc20(
+    pub fn deduct_caller_with_token(
         &mut self,
         token_info: Option<TokenFeeInfo>,
     ) -> Result<(), EVMError<DB::Error>> {
         let Some(token_info) = token_info else {
             return Err(EVMError::Custom(
-                "[MORPH] Failed to calculate erc20 gas.".to_string(),
+                "[MORPH] Failed to calculate token gas.".to_string(),
             ));
         };
 
@@ -453,7 +453,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let token_amount = eth_to_token(amount, token_info.price_ratio, token_info.scale);
         if token_amount.is_zero() {
             return Err(EVMError::Custom(
-                "[MORPH] Failed to calculate erc20 gas.".to_string(),
+                "[MORPH] Failed to calculate token gas.".to_string(),
             ));
         }
         if token_amount > token_info.balance {
@@ -487,7 +487,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         Ok(())
     }
 
-    pub fn reimburse_caller_with_erc20(
+    pub fn reimburse_caller_with_token(
         &mut self,
         token_info: Option<TokenFeeInfo>,
         gas: &Gas,
@@ -566,7 +566,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
 
 fn transfer_token_sstore<EXT, DB: Database>(
     token_info: TokenFeeInfo,
-    erc20_amount: U256,
+    amount: U256,
     ctx: &mut Context<EXT, DB>,
     forward: bool,
 ) -> Result<(), EVMError<DB::Error>> {
@@ -585,7 +585,7 @@ fn transfer_token_sstore<EXT, DB: Database>(
     ctx.evm.sstore(
         token_info.token_address,
         balance_slot,
-        balance.saturating_sub(erc20_amount),
+        balance.saturating_sub(amount),
     )?;
 
     // add amount
@@ -597,7 +597,7 @@ fn transfer_token_sstore<EXT, DB: Database>(
     ctx.evm.sstore(
         token_info.token_address,
         balance_slot,
-        balance.saturating_add(erc20_amount),
+        balance.saturating_add(amount),
     )?;
     Ok(())
 }
