@@ -34,6 +34,7 @@ bitflags = { version = "2.6.0", default-features = false }
 # For setting the CfgEnv KZGSettings. Enabled by c-kzg flag.
 c-kzg = { version = "1.0.3", default-features = false, optional = true, features = [
     "ethereum_kzg_settings",
+    "no-threads",
 ] }
 
 # Optionally use `kzg-rs` for a pure Rust implementation of KZG.
