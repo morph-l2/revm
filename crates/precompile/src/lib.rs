@@ -255,7 +255,7 @@ impl Precompiles {
         static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
         INSTANCE.get_or_init(|| {
             let mut precompiles = Self::viridian().clone();
-            precompiles.extend(bls12_381::precompiles()); // add BLS12-381 precompiles
+            // precompiles.extend(bls12_381::precompiles()); // add BLS12-381 precompiles
             precompiles.extend([
                 modexp::EMERALD, // 0x05
             ]);
