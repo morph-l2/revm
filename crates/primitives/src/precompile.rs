@@ -177,6 +177,41 @@ pub enum PrecompileError {
     NotImplemented,
     /// Catch-all variant for other errors.
     Other(String),
+
+    /// Non-canonical field element
+    NonCanonicalFp,
+    /// BLS12-381 G1 point not on curve
+    Bls12381G1NotOnCurve,
+    /// BLS12-381 G1 point not in correct subgroup
+    Bls12381G1NotInSubgroup,
+    /// BLS12-381 G2 point not on curve
+    Bls12381G2NotOnCurve,
+    /// BLS12-381 G2 point not in correct subgroup
+    Bls12381G2NotInSubgroup,
+    /// BLS12-381 scalar input length error
+    Bls12381ScalarInputLength,
+    /// BLS12-381 G1 add input length error
+    Bls12381G1AddInputLength,
+    /// BLS12-381 G1 msm input length error
+    Bls12381G1MsmInputLength,
+    /// BLS12-381 G2 add input length error
+    Bls12381G2AddInputLength,
+    /// BLS12-381 G2 msm input length error
+    Bls12381G2MsmInputLength,
+    /// BLS12-381 pairing input length error
+    Bls12381PairingInputLength,
+    /// BLS12-381 map fp to g1 input length error
+    Bls12381MapFpToG1InputLength,
+    /// BLS12-381 map fp2 to g2 input length error
+    Bls12381MapFp2ToG2InputLength,
+    /// BLS12-381 padding error
+    Bls12381FpPaddingInvalid,
+    /// BLS12-381 fp padding length error
+    Bls12381FpPaddingLength,
+    /// BLS12-381 g1 padding length error
+    Bls12381G1PaddingLength,
+    /// BLS12-381 g2 padding length error
+    Bls12381G2PaddingLength,
 }
 
 impl PrecompileError {
@@ -217,6 +252,23 @@ impl fmt::Display for PrecompileError {
             Self::BlobVerifyKzgProofFailed => "verifying blob kzg proof failed",
             Self::NotImplemented => "not implemented",
             Self::Other(s) => s,
+            Self::NonCanonicalFp => "non-canonical field element",
+            Self::Bls12381G1NotOnCurve => "bls12-381 g1 point not on curve",
+            Self::Bls12381G1NotInSubgroup => "bls12-381 g1 point not in correct subgroup",
+            Self::Bls12381G2NotOnCurve => "bls12-381 g2 point not on curve",
+            Self::Bls12381G2NotInSubgroup => "bls12-381 g2 point not in correct subgroup",
+            Self::Bls12381ScalarInputLength => "bls12-381 scalar input length error",
+            Self::Bls12381G1AddInputLength => "bls12-381 g1 add input length error",
+            Self::Bls12381G1MsmInputLength => "bls12-381 g1 msm input length error",
+            Self::Bls12381G2AddInputLength => "bls12-381 g2 add input length error",
+            Self::Bls12381G2MsmInputLength => "bls12-381 g2 msm input length error",
+            Self::Bls12381PairingInputLength => "bls12-381 pairing input length error",
+            Self::Bls12381MapFpToG1InputLength => "bls12-381 map fp to g1 input length error",
+            Self::Bls12381MapFp2ToG2InputLength => "bls12-381 map fp2 to g2 input length error",
+            Self::Bls12381FpPaddingInvalid => "bls12-381 fp 64 top bytes of input are not zero",
+            Self::Bls12381FpPaddingLength => "bls12-381 fp padding length error",
+            Self::Bls12381G1PaddingLength => "bls12-381 g1 padding length error",
+            Self::Bls12381G2PaddingLength => "bls12-381 g2 padding length error",
         };
         f.write_str(s)
     }
