@@ -102,7 +102,7 @@ negate-optimism-default-handler = [
     "revm-primitives/negate-optimism-default-handler",
 ]
 
-morph = ["revm-primitives/morph","secp256r1","blst"]
+morph = ["revm-primitives/morph"]
 # Morph default handler enabled Morph handler register by default in EvmBuilder.
 morph-default-handler = [
     "morph",
