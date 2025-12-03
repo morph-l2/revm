@@ -33,7 +33,7 @@ pub const PRECOMPILE: PrecompileWithAddress =
 /// See also: <https://eips.ethereum.org/EIPS/eip-2537#abi-for-pairing>
 pub fn pairing(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     let input_len = input.len();
-    if input_len == 0 || !input_len.is_multiple_of(PAIRING_INPUT_LENGTH) {
+    if input_len == 0 || input_len % PAIRING_INPUT_LENGTH != 0 {
         return Err(PrecompileError::Bls12381PairingInputLength.into());
     }
 

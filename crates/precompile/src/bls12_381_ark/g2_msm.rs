@@ -1,10 +1,13 @@
 //! BLS12-381 G2 msm precompile. More details in [`g2_msm`]
 use super::utils::{pad_g2_point, remove_g2_padding};
 use crate::{
-    Precompile, PrecompileError, PrecompileOutput, PrecompileResult, PrecompileWithAddress, bls12_381_ark::arkworks::p2_msm_bytes, bls12_381_const::{
+    bls12_381_ark::arkworks::p2_msm_bytes,
+    bls12_381_const::{
         DISCOUNT_TABLE_G2_MSM, G2_MSM_ADDRESS, G2_MSM_BASE_GAS_FEE, G2_MSM_INPUT_LENGTH,
         PADDED_G2_LENGTH, SCALAR_LENGTH,
-    }, bls12_381_utils::msm_required_gas
+    },
+    bls12_381_utils::msm_required_gas,
+    Precompile, PrecompileError, PrecompileOutput, PrecompileResult, PrecompileWithAddress,
 };
 use revm_primitives::Bytes;
 
@@ -22,7 +25,7 @@ pub const PRECOMPILE: PrecompileWithAddress =
 /// See also: <https://eips.ethereum.org/EIPS/eip-2537#abi-for-g2-multiexponentiation>
 pub fn g2_msm(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     let input_len = input.len();
-    if input_len == 0 || !input_len.is_multiple_of(G2_MSM_INPUT_LENGTH) {
+    if input_len == 0 || input_len % G2_MSM_INPUT_LENGTH != 0 {
         return Err(PrecompileError::Bls12381G2MsmInputLength.into());
     }
 
