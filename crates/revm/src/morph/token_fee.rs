@@ -152,7 +152,6 @@ pub(super) fn get_erc20_balance<DB: Database>(
     // Fallback: call balanceOf(address) method
     // Method signature: balanceOf(address) -> 0x70a08231
     let method_id = [0x70u8, 0xa0, 0x82, 0x31];
-
     // Encode calldata: method_id + padded address
     let mut calldata = Vec::with_capacity(36);
     calldata.extend_from_slice(&method_id);
@@ -163,7 +162,7 @@ pub(super) fn get_erc20_balance<DB: Database>(
     let mut evm = Evm::builder().with_db(db).build();
     let mut tx = TxEnv {
         caller: Address::default(),
-        gas_limit: u64::MAX,
+        gas_limit: 1000000u64,
         transact_to: TxKind::Call(token),
         value: U256::ZERO,
         data: Bytes::from(calldata),
