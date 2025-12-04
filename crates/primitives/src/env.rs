@@ -288,7 +288,7 @@ impl Env {
         // Check if account has enough balance for gas_limit*gas_price and value transfer.
         // Transfer will be done inside `*_inner` functions.
         let lack_of_fund_for_max_fee = if self.tx.fee_token_id.unwrap_or_default() != 0 {
-            let mut fee_limit = U256::from(self.tx.fee_limit.unwrap_or_default());
+            let mut fee_limit = self.tx.fee_limit.unwrap_or_default();
             if fee_limit.is_zero() || fee_limit > token_info.0 {
                 fee_limit = token_info.0
             }
@@ -655,7 +655,7 @@ pub struct TxEnv {
     pub fee_token_id: Option<u16>,
     #[cfg(feature = "morph")]
     /// For AltFeeType
-    pub fee_limit: Option<u64>,
+    pub fee_limit: Option<U256>,
 }
 
 pub enum TxType {
