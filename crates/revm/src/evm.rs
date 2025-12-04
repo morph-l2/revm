@@ -462,7 +462,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             ));
         }
 
-        if token_info.balance_slot.is_zero() {
+        if token_info.balance_slot.is_none() {
             let _ = self.transfer_token_evm(token_info, token_amount, true)?;
         } else {
             let ctx = &mut self.context;
@@ -509,7 +509,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 "[MORPH] Failed to calculate token reimburse.".to_string(),
             ));
         }
-        if token_info.balance_slot.is_zero() {
+        if token_info.balance_slot.is_none() {
             let _ = self.transfer_token_evm(token_info, token_amount, false)?;
         } else {
             transfer_token_sstore(token_info.clone(), token_amount, ctx, false)?;
@@ -577,7 +577,7 @@ fn transfer_token_sstore<EXT, DB: Database>(
         (l2_fee_vault, token_info.caller)
     };
     // sub amount
-    let balance_slot = get_mapping_account_slot(token_info.balance_slot, from);
+    let balance_slot = get_mapping_account_slot(token_info.balance_slot.unwrap_or_default(), from);
     let balance = ctx
         .evm
         .sload(token_info.token_address, balance_slot)
@@ -589,7 +589,7 @@ fn transfer_token_sstore<EXT, DB: Database>(
     )?;
 
     // add amount
-    let balance_slot = get_mapping_account_slot(token_info.balance_slot, to);
+    let balance_slot = get_mapping_account_slot(token_info.balance_slot.unwrap_or_default(), to);
     let balance = ctx
         .evm
         .sload(token_info.token_address, balance_slot)

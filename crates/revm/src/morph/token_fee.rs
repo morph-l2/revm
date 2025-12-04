@@ -27,7 +27,7 @@ pub struct TokenFeeInfo {
     /// The token balance of caller
     pub balance: U256,
     /// The users' erc20 balance slot
-    pub balance_slot: U256,
+    pub balance_slot: Option<U256>,
 }
 
 impl TokenFeeInfo {
@@ -55,13 +55,15 @@ impl TokenFeeInfo {
         }
 
         // Read balanceSlot from slot + 1
-        let mut token_balance_slot = db.storage(
+        let balance_slot_value = db.storage(
             L2_TOKEN_REGISTRY_ADDRESS,
             token_registry_base + U256::from(1),
         )?;
-        if !token_balance_slot.is_zero() {
-            token_balance_slot = token_balance_slot.saturating_sub(U256::from(1u64));
-        }
+        let token_balance_slot = if !balance_slot_value.is_zero() {
+            Some(balance_slot_value.saturating_sub(U256::from(1u64)))
+        } else {
+            None
+        };
 
         // Read isActive and decimals from slot + 2
         // In big-endian representation, rightmost byte is the lowest position
@@ -101,7 +103,6 @@ impl TokenFeeInfo {
             balance: caller_token_balance,
             balance_slot: token_balance_slot,
         };
-
         Ok(Some(token_fee))
     }
 }
@@ -137,13 +138,13 @@ pub(super) fn get_erc20_balance<DB: Database>(
     db: &mut DB,
     token: Address,
     account: Address,
-    token_balance_slot: U256,
+    token_balance_slot: Option<U256>,
 ) -> Result<U256, DB::Error> {
     // If balance slot is provided, try to read directly from storage
-    if !token_balance_slot.is_zero() {
+    if let Some(slot) = token_balance_slot {
         let mut data = [0u8; 32];
         data[12..32].copy_from_slice(account.as_slice());
-        if let Ok(balance) = load_mapping_value(db, token, token_balance_slot, data.to_vec()) {
+        if let Ok(balance) = load_mapping_value(db, token, slot, data.to_vec()) {
             return Ok(balance);
         }
     }
@@ -170,7 +171,7 @@ pub(super) fn get_erc20_balance<DB: Database>(
         chain_id: None,
         ..Default::default()
     };
-    tx.morph.is_l1_msg = false;
+    tx.morph.is_l1_msg = true;
     tx.morph.rlp_bytes = Some(Bytes::default());
     evm.context.evm.env.tx = tx;
 
@@ -187,7 +188,21 @@ pub(super) fn get_erc20_balance<DB: Database>(
             }
             Ok(U256::ZERO)
         }
-        Err(EVMError::Database(db_err)) => Err(db_err),
-        Err(_) => Ok(U256::ZERO),
+        Err(EVMError::Database(db_err)) => {
+            println!("get_erc20_balance db error");
+            Err(db_err)
+        }
+        Err(e) => {
+            match &e {
+                EVMError::Transaction(t) => {
+                    println!("get_erc20_balance Transaction error: {:?}", t)
+                }
+                EVMError::Header(h) => println!("get_erc20_balance Header error: {:?}", h),
+                EVMError::Database(_) => println!("get_erc20_balance Database error"),
+                EVMError::Custom(c) => println!("get_erc20_balance Custom error: {}", c),
+                EVMError::Precompile(p) => println!("get_erc20_balance Precompile error: {}", p),
+            }
+            Ok(U256::ZERO)
+        }
     }
 }

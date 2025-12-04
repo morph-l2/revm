@@ -35,7 +35,14 @@ pub fn validate_tx_against_state<SPEC: Spec, EXT, DB: Database>(
     }
 
     let token_fee_info = match &context.evm.inner.token_fee_info {
-        Some(fee_info) => (fee_info.balance, fee_info.price_ratio, fee_info.scale),
+        Some(fee_info) => {
+            if !fee_info.is_active {
+                return Err(EVMError::Custom(
+                    "[MORPH]token_fee_info is not active.".to_string(),
+                ));
+            }
+            (fee_info.balance, fee_info.price_ratio, fee_info.scale)
+        }
         None => (U256::ZERO, U256::ZERO, U256::ZERO),
     };
 
