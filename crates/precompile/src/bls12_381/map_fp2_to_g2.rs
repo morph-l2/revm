@@ -15,7 +15,7 @@ pub const PRECOMPILE: PrecompileWithAddress =
 pub const ADDRESS: u64 = 0x13;
 
 /// Base gas fee for BLS12-381 map_fp2_to_g2 operation.
-const BASE_GAS_FEE: u64 = 75000;
+const BASE_GAS_FEE: u64 = 23800;
 
 /// Field-to-curve call expects 128 bytes as an input that is interpreted as
 /// an element of Fp2. Output of this call is 256 bytes and is an encoded G2
