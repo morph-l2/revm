@@ -20,8 +20,7 @@ pub fn gt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
 
 /// Implements the CLZ instruction - count leading zeros.
 pub fn clz<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
-    // check!(interpreter, OSAKA);
-    // gas!(interpreter, gas::LOW);
+    gas!(interpreter, gas::LOW);
     pop_top!(interpreter, op1);
 
     let leading_zeros = op1.leading_zeros();
