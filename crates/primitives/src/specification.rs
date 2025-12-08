@@ -30,7 +30,6 @@ pub enum SpecId {
     CANCUN = 17,          // Cancun                 19426587 (Timestamp: 1710338135)
     PRAGUE = 18,          // Prague                 TBD
     PRAGUE_EOF = 19,      // Prague+EOF             TBD
-    OSAKA = 20,           // Osaka
     #[default]
     LATEST = u8::MAX,
 }
@@ -212,7 +211,6 @@ impl From<SpecId> for &'static str {
             SpecId::CANCUN => "Cancun",
             SpecId::PRAGUE => "Prague",
             SpecId::PRAGUE_EOF => "PragueEOF",
-            SpecId::OSAKA => "Osaka",
             #[cfg(feature = "optimism")]
             SpecId::BEDROCK => "Bedrock",
             #[cfg(feature = "optimism")]

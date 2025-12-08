@@ -67,7 +67,7 @@ rstest = "0.22.0"
 alloy-provider = "0.3"
 
 [features]
-default = ["std", "kzg-rs", "portable"]
+default = ["std", "kzg-rs", "portable", "morph-default-handler"]
 std = [
     "serde?/std",
     "serde_json?/std",

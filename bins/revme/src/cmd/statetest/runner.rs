@@ -274,8 +274,7 @@ pub fn execute_test_suite(
             let bytecode = to_analysed(Bytecode::new_raw(info.code));
             let acc_info = revm::primitives::AccountInfo {
                 balance: info.balance,
-                #[cfg(feature = "morph")]
-                code_size,
+                code_size: 0,
                 code_hash: keccak_code_hash,
                 #[cfg(feature = "morph-poseidon-codehash")]
                 poseidon_code_hash,

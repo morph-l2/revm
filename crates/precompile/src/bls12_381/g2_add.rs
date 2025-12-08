@@ -11,7 +11,7 @@ pub const PRECOMPILE: PrecompileWithAddress =
 /// BLS12_G2ADD precompile address.
 pub const ADDRESS: u64 = 0x0e;
 /// Base gas fee for BLS12-381 g2_add operation.
-const BASE_GAS_FEE: u64 = 800;
+const BASE_GAS_FEE: u64 = 600;
 
 /// Input length of g2_add operation.
 const INPUT_LENGTH: usize = 512;

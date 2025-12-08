@@ -1,3 +1,5 @@
+#[cfg(feature = "morph")]
+use crate::morph::TokenFeeInfo;
 use crate::{
     db::Database,
     interpreter::{
@@ -33,6 +35,9 @@ pub struct InnerEvmContext<DB: Database> {
     /// Used as temporary value holder to store L1 block info.
     #[cfg(feature = "morph")]
     pub l1_block_info: Option<crate::morph::L1BlockInfo>,
+    /// Used as temporary value holder to store alt fee info.
+    #[cfg(feature = "morph")]
+    pub token_fee_info: Option<TokenFeeInfo>,
 }
 
 impl<DB: Database + Clone> Clone for InnerEvmContext<DB>
@@ -47,6 +52,8 @@ where
             error: self.error.clone(),
             #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: self.l1_block_info.clone(),
+            #[cfg(feature = "morph")]
+            token_fee_info: self.token_fee_info.clone(),
         }
     }
 }
@@ -60,6 +67,8 @@ impl<DB: Database> InnerEvmContext<DB> {
             error: Ok(()),
             #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: None,
+            #[cfg(feature = "morph")]
+            token_fee_info: None,
         }
     }
 
@@ -73,6 +82,8 @@ impl<DB: Database> InnerEvmContext<DB> {
             error: Ok(()),
             #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: None,
+            #[cfg(feature = "morph")]
+            token_fee_info: None,
         }
     }
 
@@ -88,6 +99,8 @@ impl<DB: Database> InnerEvmContext<DB> {
             error: Ok(()),
             #[cfg(any(feature = "optimism", feature = "morph"))]
             l1_block_info: self.l1_block_info,
+            #[cfg(feature = "morph")]
+            token_fee_info: self.token_fee_info,
         }
     }
 

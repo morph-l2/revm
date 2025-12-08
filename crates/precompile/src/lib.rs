@@ -23,6 +23,10 @@ pub mod secp256k1;
 pub mod secp256r1;
 pub mod utilities;
 
+pub mod bls12_381_ark;
+pub mod bls12_381_const;
+pub mod bls12_381_utils;
+
 pub use fatal_precompile::fatal_precompile;
 
 #[cfg(all(feature = "c-kzg", feature = "kzg-rs"))]
@@ -254,12 +258,13 @@ impl Precompiles {
     pub fn emerald() -> &'static Self {
         static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
         INSTANCE.get_or_init(|| {
-            let precompiles = Self::viridian().clone();
-            precompiles.extend(bls12_381::precompiles()); // add BLS12-381 precompiles
+            let mut precompiles = Self::viridian().clone();
+            precompiles.extend(bls12_381_ark::precompiles()); // add BLS12-381 precompiles
             precompiles.extend([
-                modexp::OSAKA, // 0x05
-                secp256r1::P256VERIFY_OSAKA,
+                modexp::EMERALD, // 0x05
             ]);
+            #[cfg(feature = "secp256r1")]
+            precompiles.extend([secp256r1::P256VERIFY_OSAKA]);
             Box::new(precompiles)
         })
     }

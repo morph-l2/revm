@@ -55,6 +55,11 @@ kzg-rs = { version = "0.2.2", default-features = false, optional = true }
 # BLS12-381 precompiles
 blst = { version = "0.3.13", optional = true }
 
+ark-bls12-381 = { version = "0.5", features = ["curve"] }
+ark-ec = { version = "0.5", default-features = false }
+ark-ff = { version = "0.5", default-features = false }
+ark-serialize = { version = "0.5", default-features = false }
+
 # p256verify precompile
 p256 = { version = "0.13.2", optional = true, default-features = false, features = [
     "ecdsa",
@@ -71,6 +76,12 @@ rstest = "0.22.0"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
+secp256k1 = { version = ">=0.28, <=0.29", default-features = false, features = [
+    "alloc",
+    "recovery",
+    "rand",
+    "global-context",
+] }
 
 [features]
 default = ["std", "kzg-rs", "portable"]
@@ -96,7 +107,7 @@ negate-optimism-default-handler = [
     "revm-primitives/negate-optimism-default-handler",
 ]
 
-morph = ["revm-primitives/morph"]
+morph = ["revm-primitives/morph","secp256r1"]
 # Morph default handler enabled Morph handler register by default in EvmBuilder.
 morph-default-handler = [
     "morph",

@@ -12,7 +12,7 @@ pub const PRECOMPILE: PrecompileWithAddress =
 /// BLS12_G2MUL precompile address.
 pub const ADDRESS: u64 = 0x0f;
 /// Base gas fee for BLS12-381 g2_mul operation.
-pub(super) const BASE_GAS_FEE: u64 = 45000;
+pub(super) const BASE_GAS_FEE: u64 = 22500;
 
 /// Input length of g2_mul operation.
 pub(super) const INPUT_LENGTH: usize = 288;
