@@ -14,7 +14,6 @@ mod msm;
 pub mod pairing;
 mod utils;
 
-
 /// Returns the BLS12-381 precompiles with their addresses.
 pub fn precompiles() -> impl Iterator<Item = PrecompileWithAddress> {
     [

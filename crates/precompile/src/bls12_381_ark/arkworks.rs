@@ -15,7 +15,6 @@ use ark_ff::{One, PrimeField, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use std::vec::Vec;
 
-
 /// Reads a single `Fp` field element from the input slice.
 ///
 /// Takes a byte slice in Big Endian format and attempts to interpret it as an

@@ -1,7 +1,7 @@
 //! Constants specifying the precompile addresses for each precompile in EIP-2537
 
-use crate::u64_to_address;
 use crate::primitives::{hex, Address};
+use crate::u64_to_address;
 
 /// G1 add precompile address
 pub const G1_ADD_ADDRESS: Address = u64_to_address(0x0b);
