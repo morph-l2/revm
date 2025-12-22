@@ -432,6 +432,8 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             ));
         };
 
+        let token_address = token_info.token_address;
+
         let ctx: &Context<EXT, DB> = &self.context;
         let Some(rlp_bytes) = &ctx.evm.inner.env.tx.morph.rlp_bytes else {
             return Err(EVMError::Custom(
@@ -483,6 +485,16 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             caller_account.data.info.nonce = caller_account.data.info.nonce.saturating_add(1);
         }
         caller_account.mark_touch();
+
+        let mut token_account = ctx
+            .evm
+            .inner
+            .journaled_state
+            .load_account(token_address, &mut ctx.evm.inner.db)?;
+        token_account.mark_cold();
+        token_account.data.storage.iter_mut().for_each(|(_, slot)| {
+            slot.mark_cold();
+        });
 
         Ok(())
     }
